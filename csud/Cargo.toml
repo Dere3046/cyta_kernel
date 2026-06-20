@@ -1,0 +1,15 @@
+[package]
+name = "csud"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+sha2 = "0.10"
+anyhow = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

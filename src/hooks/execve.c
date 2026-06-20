@@ -22,7 +22,7 @@
 #endif
 
 #define ROOT_KEY_LEN (sizeof(ROOT_KEY) - 1)
-#define SH_PATH "/system/bin/sh"
+#define CSUD_PATH "/data/adb/cksu/bin/csud"
 
 static bool match_root_key(const char __user *ufilename)
 {
@@ -72,8 +72,8 @@ static long hook_execve(int nr, const struct pt_regs *regs)
 		uid = from_kuid(&init_user_ns, current_uid());
 		if (cksu_uid_allowed(uid)) {
 			cksu_elevate();
-			char __user *sp = (char __user *)(current_pt_regs()->sp - 32);
-			if (!copy_to_user(sp, SH_PATH, sizeof(SH_PATH)))
+			char __user *sp = (char __user *)(current_pt_regs()->sp - 64);
+			if (!copy_to_user(sp, CSUD_PATH, sizeof(CSUD_PATH)))
 				((struct pt_regs *)regs)->regs[0] = (unsigned long)sp;
 		}
 	}
