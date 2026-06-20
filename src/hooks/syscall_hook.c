@@ -26,6 +26,28 @@ struct hook_entry {
 static struct hook_entry entries[8];
 static int entry_count;
 
+static void cfi_bypass(void)
+{
+	static const char *cfi_syms[] = {
+		"__cfi_check",
+		"__cfi_check_fail",
+		"__cfi_slowpath_diag",
+		"__cfi_slowpath",
+		"__ubsan_handle_cfi_check_fail_abort",
+		"__ubsan_handle_cfi_check_fail",
+		"report_cfi_failure",
+		NULL
+	};
+	u32 ret_insn = 0xD65F03C0;
+
+	for (int i = 0; cfi_syms[i]; i++) {
+		unsigned long addr = kallsyms_name_to_addr(cfi_syms[i]);
+		if (addr)
+			cksu_patch_text((void *)addr, &ret_insn, 4,
+					CKSU_PATCH_FLUSH_DCACHE | CKSU_PATCH_FLUSH_ICACHE);
+	}
+}
+
 int cksu_syscall_hook_init(void)
 {
 	sct = (syscall_fn_t *)kallsyms_name_to_addr("sys_call_table");
@@ -33,8 +55,11 @@ int cksu_syscall_hook_init(void)
 		pr_err("[cksu] sys_call_table not found\n");
 		return -ENOENT;
 	}
+
+	cfi_bypass();
+
 	entry_count = 0;
-	pr_info("[cksu] syscall_hook: table=0x%lx\n", (unsigned long)sct);
+	pr_info("[cksu] syscall_hook: table=0x%lx cfi=bypassed\n", (unsigned long)sct);
 	return 0;
 }
 

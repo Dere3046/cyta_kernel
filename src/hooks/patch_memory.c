@@ -101,6 +101,11 @@ static int patch_text_cb(void *arg)
 		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE) && flush_dcache_fn)
 			flush_dcache_fn((unsigned long)p->dst,
 					(unsigned long)p->dst + p->len);
+		if (!ret && (p->flags & CKSU_PATCH_FLUSH_ICACHE)) {
+			asm volatile("ic ivau, %0" :: "r"(p->dst));
+			asm volatile("dsb ish");
+			asm volatile("isb");
+		}
 done:
 		atomic_inc(&p->cpu_count);
 	} else {
