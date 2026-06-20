@@ -7,6 +7,8 @@ $(MODULE_NAME)-objs := \
 	src/supercall/auth.o \
 	src/policy/allowlist.o \
 	src/policy/context.o \
+	src/hooks/patch_memory.o \
+	src/hooks/syscall_hook.o \
 	src/hooks/kprobe.o \
 	src/hooks/selinux.o \
 	src/hooks/audit.o \
