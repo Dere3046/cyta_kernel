@@ -2,18 +2,20 @@
 MODULE_NAME := cksu
 $(MODULE_NAME)-objs := \
 	src/ksymless/ksymless.o \
-	src/supercall/supercall.o \
-	src/supercall/dispatch.o \
-	src/supercall/auth.o \
-	src/policy/allowlist.o \
-	src/policy/context.o \
-	src/policy/virt_selinux.o \
+	src/hooks/patch_memory.o \
+	src/hooks/syscall_hook.o \
 	src/hooks/kprobe.o \
 	src/hooks/selinux.o \
 	src/hooks/audit.o \
 	src/hooks/elevate.o \
 	src/hooks/execve.o \
 	src/hooks/access.o \
+	src/supercall/supercall.o \
+	src/supercall/dispatch.o \
+	src/supercall/auth.o \
+	src/policy/allowlist.o \
+	src/policy/context.o \
+	src/policy/virt_selinux.o \
 	src/boot/rc_inject.o \
 	src/main.o
 obj-m := $(MODULE_NAME).o
