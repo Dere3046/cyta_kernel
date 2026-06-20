@@ -1,8 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * test_root.c — trigger CKSU root elevation via root key
  *
- * Build: aarch64-linux-gnu-gcc -static -o test_root test_root.c
- * Usage: adb push test_root /data/local/tmp/ && adb shell /data/local/tmp/test_root
+ * Copyright (C) 2026 dere3046
  */
 
 #include <stdio.h>

@@ -1,13 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * audit_filter.c — hook audit_log_start, suppress root audit logs
+ * audit.c — hook audit_log_start, suppress root audit logs
+ *
+ * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
 #include <linux/kprobes.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
-#include "hook.h"
-#include "audit_filter.h"
+#include "kprobe.h"
+#include "audit.h"
 
 static struct cksu_hook hook_audit_log_start;
 

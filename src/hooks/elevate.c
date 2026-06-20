@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * su_elevate.c — hook __arm64_sys_execve, root key trigger
+ * elevate.c — root key trigger via __arm64_sys_execve hook
  *
- * Userspace calls: syscall(__NR_execve, ROOT_KEY, NULL, NULL)
- * The hook elevates current->cred to root, then execve fails
- * with -ENOENT (file not found). Caller is now uid=0.
+ * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
@@ -13,8 +12,8 @@
 #include <linux/uaccess.h>
 #include <linux/string.h>
 #include <linux/thread_info.h>
-#include "hook.h"
-#include "su_elevate.h"
+#include "kprobe.h"
+#include "elevate.h"
 
 #ifndef ROOT_KEY
 #define ROOT_KEY "cksu_2026_dere3046_f8a3b7c1d9e2x4z6w0q5"

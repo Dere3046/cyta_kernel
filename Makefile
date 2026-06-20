@@ -1,8 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
 MODULE_NAME := cksu
-$(MODULE_NAME)-objs := src/ksymless_core.o src/hook.o src/selinux_bypass.o src/su_elevate.o src/audit_filter.o src/module_main.o
+$(MODULE_NAME)-objs := src/ksymless/ksymless.o src/hooks/kprobe.o \
+	src/hooks/selinux.o src/hooks/elevate.o src/hooks/audit.o src/main.o
 obj-m := $(MODULE_NAME).o
 
-ccflags-y += -Isrc
+ccflags-y += -Isrc -Isrc/ksymless -Isrc/hooks
 ccflags-y += -Wno-declaration-after-statement
 ccflags-y += -Wno-unused-variable
 ccflags-y += -Wno-unused-function

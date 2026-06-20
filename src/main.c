@@ -1,15 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * module_main.c — CKSU entry
+ * main.c — CKSU module entry
+ *
+ * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/init.h>
 
-#include "ksymless_core.h"
-#include "selinux_bypass.h"
-#include "su_elevate.h"
-#include "audit_filter.h"
+#include "ksymless.h"
+#include "selinux.h"
+#include "elevate.h"
+#include "audit.h"
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("CKSU");

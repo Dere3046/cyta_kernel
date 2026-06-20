@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * hook.c — kprobe wrapper
+ * kprobe.c — kprobe install/remove wrapper
+ *
+ * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
 #include <linux/kprobes.h>
-#include "hook.h"
+#include "kprobe.h"
 
 int cksu_hook_install(struct cksu_hook *h, const char *symbol,
 		      int (*handler)(struct kprobe *p, struct pt_regs *regs))

@@ -1,16 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * selinux_bypass.c — hook avc_denied
+ * selinux.c — hook avc_denied, bypass SELinux for root
  *
- * avc_denied returns 0 (allow) or -EACCES (deny).
- * For root tasks we force return 0 at entry via kprobe.
+ * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
 #include <linux/kprobes.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
-#include "hook.h"
-#include "selinux_bypass.h"
+#include "kprobe.h"
+#include "selinux.h"
 
 static struct cksu_hook hook_avc_denied;
 

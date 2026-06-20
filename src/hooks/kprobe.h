@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * hook.h — kprobe wrapper
+ * kprobe.h — kprobe install/remove wrapper
+ *
+ * Copyright (C) 2026 dere3046
  */
 
-#ifndef HOOK_H
-#define HOOK_H
+#ifndef CKSU_KPROBE_H
+#define CKSU_KPROBE_H
 
 #include <linux/kprobes.h>
 
