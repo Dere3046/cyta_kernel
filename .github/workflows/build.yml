@@ -11,9 +11,15 @@ jobs:
       image: ghcr.io/ylarod/ddk:android16-6.12
     steps:
       - uses: actions/checkout@v4
-      - name: Build
+        with:
+          submodules: true
+      - name: Build lkmloader
+        run: make -C lkmloader
+      - name: Build cksu
         run: make
       - uses: actions/upload-artifact@v4
         with:
           name: cksu-android16-6.12
-          path: cksu.ko
+          path: |
+            cksu.ko
+            lkmloader/lkmloader.ko
