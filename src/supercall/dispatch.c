@@ -16,6 +16,7 @@
 #include "allowlist.h"
 #include "context.h"
 #include "elevate.h"
+#include "virt_selinux.h"
 
 long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 {
@@ -75,6 +76,44 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 		if (!cksu_is_blessed())
 			return -EPERM;
 		cksu_auth_init((const char __user *)a1);
+		return 0;
+
+	case CKSU_LOAD_SEPOLICY:
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+		if (!cksu_is_blessed())
+			return -EPERM;
+		return cksu_virt_load_rules(
+			(const struct cksu_sepolicy_cmd __user *)a1, (int)a2);
+
+	case CKSU_CLEAR_SEPOLICY:
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+		if (!cksu_is_blessed())
+			return -EPERM;
+		cksu_virt_clear_all();
+		return 0;
+
+	case CKSU_SET_VIRT_DOMAIN:
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+		if (!cksu_is_blessed())
+			return -EPERM;
+		return cksu_virt_set_domain((uid_t)a1, (u32)a2);
+
+	case CKSU_REPORT_EVENT:
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+		if (!cksu_is_blessed())
+			return -EPERM;
 		return 0;
 	}
 

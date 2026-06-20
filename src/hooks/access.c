@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * access.c — faccessat/newfstatat hooks: fake /system/bin/su for allowed UIDs
+ * access.c — faccessat/newfstatat hooks: KP-style path rewrite for su compat
  *
  * Copyright (C) 2026 dere3046
  */
@@ -17,6 +17,7 @@
 
 #define SU_PATH "/system/bin/su"
 #define SU_PATH_LEN 15
+#define SH_PATH "/system/bin/sh"
 
 static struct cksu_hook hook_faccessat;
 static struct cksu_hook hook_newfstatat;
@@ -55,9 +56,11 @@ static int handler_faccessat(struct kprobe *p, struct pt_regs *regs)
 	if (!cksu_uid_allowed(uid))
 		return 0;
 
-	ur->regs[0] = 0;
-	regs->pc = regs->regs[30];
-	return 1;
+	char __user *sp = (char __user *)(ur->sp - 32);
+	if (!copy_to_user(sp, SH_PATH, sizeof(SH_PATH)))
+		ur->regs[1] = (unsigned long)sp;
+
+	return 0;
 }
 
 static int handler_newfstatat(struct kprobe *p, struct pt_regs *regs)
@@ -76,9 +79,11 @@ static int handler_newfstatat(struct kprobe *p, struct pt_regs *regs)
 	if (!cksu_uid_allowed(uid))
 		return 0;
 
-	ur->regs[0] = 0;
-	regs->pc = regs->regs[30];
-	return 1;
+	char __user *sp = (char __user *)(ur->sp - 32);
+	if (!copy_to_user(sp, SH_PATH, sizeof(SH_PATH)))
+		ur->regs[1] = (unsigned long)sp;
+
+	return 0;
 }
 
 int cksu_access_init(void)

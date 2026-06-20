@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * audit.c — hook audit_log_start, suppress root audit logs
+ * audit.c — hook audit_log_start, suppress audit for blessed + virtual domains
  *
  * Copyright (C) 2026 dere3046
  */
@@ -11,23 +11,32 @@
 #include <linux/sched.h>
 #include "kprobe.h"
 #include "audit.h"
+#include "context.h"
+#include "virt_selinux.h"
 
 static struct cksu_hook hook_audit_log_start;
 
 static int handler_audit_log_start(struct kprobe *p, struct pt_regs *regs)
 {
-	if (uid_eq(current_uid(), GLOBAL_ROOT_UID)) {
-		regs->regs[0] = 0;
-		regs->pc = regs->regs[30];
-		return 1;
-	}
+	if (cksu_is_blessed())
+		goto suppress;
+
+	uid_t uid = from_kuid(&init_user_ns, current_uid());
+	if (cksu_virt_uid_has_domain(uid))
+		goto suppress;
+
 	return 0;
+
+suppress:
+	regs->regs[0] = 0;
+	regs->pc = regs->regs[30];
+	return 1;
 }
 
 int cksu_audit_init(void)
 {
 	return cksu_hook_install(&hook_audit_log_start, "audit_log_start",
-				 handler_audit_log_start);
+				handler_audit_log_start);
 }
 
 void cksu_audit_exit(void)

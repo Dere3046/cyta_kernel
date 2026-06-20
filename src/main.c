@@ -14,10 +14,12 @@
 #include "auth.h"
 #include "supercall.h"
 #include "allowlist.h"
+#include "virt_selinux.h"
 #include "selinux.h"
 #include "audit.h"
 #include "execve.h"
 #include "access.h"
+#include "rc_inject.h"
 
 static char *superkey = NULL;
 module_param(superkey, charp, 0);
@@ -37,12 +39,11 @@ static int __init cksu_init(void)
 
 	cksu_auth_init(superkey);
 	cksu_allowlist_init();
+	cksu_virt_selinux_init();
 
 	ret = cksu_supercall_init();
-	if (ret) {
-		pr_err("[cksu] supercall init failed: %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		pr_warn("[cksu] supercall failed: %d\n", ret);
 
 	ret = cksu_selinux_init();
 	if (ret)
@@ -60,17 +61,21 @@ static int __init cksu_init(void)
 	if (ret)
 		pr_warn("[cksu] access hook failed: %d\n", ret);
 
+	cksu_rc_inject_init();
+
 	pr_info("[cksu] ready\n");
 	return 0;
 }
 
 static void __exit cksu_exit(void)
 {
+	cksu_rc_inject_exit();
 	cksu_access_exit();
 	cksu_execve_exit();
 	cksu_audit_exit();
 	cksu_selinux_exit();
 	cksu_supercall_exit();
+	cksu_virt_selinux_exit();
 	cksu_allowlist_exit();
 	pr_info("[cksu] exit\n");
 }

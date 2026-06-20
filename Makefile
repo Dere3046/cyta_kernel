@@ -7,17 +7,19 @@ $(MODULE_NAME)-objs := \
 	src/supercall/auth.o \
 	src/policy/allowlist.o \
 	src/policy/context.o \
+	src/policy/virt_selinux.o \
 	src/hooks/kprobe.o \
 	src/hooks/selinux.o \
 	src/hooks/audit.o \
 	src/hooks/elevate.o \
 	src/hooks/execve.o \
 	src/hooks/access.o \
+	src/boot/rc_inject.o \
 	src/main.o
 obj-m := $(MODULE_NAME).o
 
 ccflags-y += -I$(src)/src -I$(src)/src/ksymless -I$(src)/src/hooks
-ccflags-y += -I$(src)/src/supercall -I$(src)/src/policy
+ccflags-y += -I$(src)/src/supercall -I$(src)/src/policy -I$(src)/src/boot
 ccflags-y += -Wno-declaration-after-statement
 ccflags-y += -Wno-unused-variable
 ccflags-y += -Wno-unused-function

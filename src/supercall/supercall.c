@@ -25,7 +25,7 @@ static int supercall_pre_handler(struct kprobe *p, struct pt_regs *regs)
 	u8 resp[CKSU_HASH_LEN];
 	long ret;
 
-	if (cmd < CKSU_HELLO || cmd > CKSU_SET_KEY)
+	if (cmd < CKSU_HELLO || cmd > CKSU_CMD_MAX)
 		return 0;
 
 	if (cmd == CKSU_HELLO || cmd == CKSU_GET_CHALLENGE) {

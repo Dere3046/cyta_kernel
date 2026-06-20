@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * execve.c — execve hook: root key bootstrap + su compat
+ * execve.c — execve hook: root key bootstrap + su compat (KP-style path rewrite)
  *
  * Copyright (C) 2026 dere3046
  */
@@ -21,6 +21,7 @@
 #endif
 
 #define ROOT_KEY_LEN (sizeof(ROOT_KEY) - 1)
+#define SH_PATH "/system/bin/sh"
 
 static struct cksu_hook hook_execve;
 
@@ -66,10 +67,17 @@ static int handler_execve(struct kprobe *p, struct pt_regs *regs)
 		return 0;
 	}
 
+	if (!cksu_allowlist_count())
+		return 0;
+
 	if (is_su_path(filename)) {
 		uid = from_kuid(&init_user_ns, current_uid());
-		if (cksu_uid_allowed(uid))
+		if (cksu_uid_allowed(uid)) {
 			cksu_elevate();
+			char __user *sp = (char __user *)(ur->sp - 32);
+			if (!copy_to_user(sp, SH_PATH, sizeof(SH_PATH)))
+				ur->regs[0] = (unsigned long)sp;
+		}
 	}
 
 	return 0;
