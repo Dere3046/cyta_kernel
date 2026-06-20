@@ -12,6 +12,15 @@
 #include <crypto/sha2.h>
 #include "auth.h"
 
+static int cksu_memneq(const void *a, const void *b, size_t len)
+{
+	const u8 *x = a, *y = b;
+	int ret = 0;
+	for (size_t i = 0; i < len; i++)
+		ret |= x[i] ^ y[i];
+	return ret;
+}
+
 static char superkey[CKSU_KEY_MAX];
 static u8 pending_nonce[CKSU_NONCE_LEN];
 static bool nonce_valid;
@@ -64,7 +73,7 @@ bool cksu_auth_verify(const u8 *response)
 
 	sha256(buf, key_len + CKSU_NONCE_LEN, expected);
 
-	rc = crypto_memneq(expected, response, CKSU_HASH_LEN);
+	rc = cksu_memneq(expected, response, CKSU_HASH_LEN);
 	memzero_explicit(buf, sizeof(buf));
 	memzero_explicit(expected, sizeof(expected));
 
