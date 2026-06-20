@@ -1,76 +1,99 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * access.c — faccessat/newfstatat hooks via syscall table patching
+ * access.c — faccessat/newfstatat hooks: fake /system/bin/su for allowed UIDs
  *
  * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
+#include <linux/kprobes.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
-#include <asm/unistd.h>
+#include "kprobe.h"
 #include "access.h"
-#include "syscall_hook.h"
 #include "allowlist.h"
 
 #define SU_PATH "/system/bin/su"
+#define SU_PATH_LEN 15
 
-static cksu_syscall_fn orig_faccessat;
-static cksu_syscall_fn orig_newfstatat;
+static struct cksu_hook hook_faccessat;
+static struct cksu_hook hook_newfstatat;
 
 static bool is_su_access(const char __user *upath)
 {
-	char kbuf[32];
+	char first;
+	char kbuf[SU_PATH_LEN + 2];
 	long len;
 
-	len = strncpy_from_user(kbuf, upath, sizeof(kbuf));
-	if (len <= 0)
+	if (get_user(first, upath))
+		return false;
+	if (first != '/')
 		return false;
 
-	return strcmp(kbuf, SU_PATH) == 0;
+	len = strncpy_from_user(kbuf, upath, sizeof(kbuf));
+	if (len != SU_PATH_LEN)
+		return false;
+
+	return memcmp(kbuf, SU_PATH, SU_PATH_LEN) == 0;
 }
 
-static long __nocfi hook_faccessat(const struct pt_regs *regs)
+static int handler_faccessat(struct kprobe *p, struct pt_regs *regs)
 {
-	const char __user *pathname = (const char __user *)regs->regs[1];
+	struct pt_regs *ur = (struct pt_regs *)regs->regs[0];
+	const char __user *pathname = (const char __user *)ur->regs[1];
 	uid_t uid;
 
-	if (is_su_access(pathname)) {
-		uid = from_kuid(&init_user_ns, current_uid());
-		if (cksu_uid_allowed(uid))
-			return 0;
-	}
+	if (!cksu_allowlist_count())
+		return 0;
 
-	return orig_faccessat(regs);
+	if (!is_su_access(pathname))
+		return 0;
+
+	uid = from_kuid(&init_user_ns, current_uid());
+	if (!cksu_uid_allowed(uid))
+		return 0;
+
+	ur->regs[0] = 0;
+	regs->pc = regs->regs[30];
+	return 1;
 }
 
-static long __nocfi hook_newfstatat(const struct pt_regs *regs)
+static int handler_newfstatat(struct kprobe *p, struct pt_regs *regs)
 {
-	const char __user *pathname = (const char __user *)regs->regs[1];
+	struct pt_regs *ur = (struct pt_regs *)regs->regs[0];
+	const char __user *pathname = (const char __user *)ur->regs[1];
 	uid_t uid;
 
-	if (is_su_access(pathname)) {
-		uid = from_kuid(&init_user_ns, current_uid());
-		if (cksu_uid_allowed(uid))
-			return 0;
-	}
+	if (!cksu_allowlist_count())
+		return 0;
 
-	return orig_newfstatat(regs);
+	if (!is_su_access(pathname))
+		return 0;
+
+	uid = from_kuid(&init_user_ns, current_uid());
+	if (!cksu_uid_allowed(uid))
+		return 0;
+
+	ur->regs[0] = 0;
+	regs->pc = regs->regs[30];
+	return 1;
 }
 
 int cksu_access_init(void)
 {
 	int ret;
 
-	ret = cksu_syscall_replace(__NR_faccessat, hook_faccessat, &orig_faccessat);
+	ret = cksu_hook_install(&hook_faccessat, "__arm64_sys_faccessat",
+				handler_faccessat);
 	if (ret)
 		return ret;
 
-	ret = cksu_syscall_replace(__NR_newfstatat, hook_newfstatat, &orig_newfstatat);
+	ret = cksu_hook_install(&hook_newfstatat, "__arm64_sys_newfstatat",
+				handler_newfstatat);
 	if (ret) {
-		cksu_syscall_restore(__NR_faccessat);
+		cksu_hook_remove(&hook_faccessat);
 		return ret;
 	}
 
@@ -79,6 +102,6 @@ int cksu_access_init(void)
 
 void cksu_access_exit(void)
 {
-	cksu_syscall_restore(__NR_newfstatat);
-	cksu_syscall_restore(__NR_faccessat);
+	cksu_hook_remove(&hook_newfstatat);
+	cksu_hook_remove(&hook_faccessat);
 }

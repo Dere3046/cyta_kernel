@@ -1,49 +1,54 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * supercall.c — truncate syscall hook entry point (via table patching)
+ * supercall.c — truncate syscall hook entry point
  *
  * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
+#include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
-#include <asm/unistd.h>
 #include "supercall.h"
 #include "auth.h"
 #include "dispatch.h"
-#include "syscall_hook.h"
 
-static cksu_syscall_fn orig_truncate;
+static struct kprobe supercall_kp;
 
-static long __nocfi hook_truncate(const struct pt_regs *regs)
+static int supercall_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
-	const char __user *u_arg0 = (const char __user *)regs->regs[0];
-	long cmd = (long)regs->regs[1];
+	struct pt_regs *ur = (struct pt_regs *)regs->regs[0];
+	const char __user *u_arg0 = (const char __user *)ur->regs[0];
+	long cmd = (long)ur->regs[1];
+	long arg1 = (long)ur->regs[2];
+	long arg2 = (long)ur->regs[3];
 	u8 resp[CKSU_HASH_LEN];
 	long ret;
 
 	if (cmd < CKSU_HELLO || cmd > CKSU_SET_KEY)
-		return orig_truncate(regs);
+		return 0;
 
 	if (cmd == CKSU_HELLO || cmd == CKSU_GET_CHALLENGE) {
-		long arg1 = (long)regs->regs[2];
-		ret = cksu_dispatch(NULL, 0, cmd, arg1, 0);
+		ret = cksu_dispatch(NULL, 0, cmd, arg1, arg2);
 	} else {
-		long arg1 = (long)regs->regs[2];
-		long arg2 = (long)regs->regs[3];
 		if (copy_from_user(resp, u_arg0, CKSU_HASH_LEN))
-			return orig_truncate(regs);
+			return 0;
 		ret = cksu_dispatch((const char *)resp, CKSU_HASH_LEN, cmd, arg1, arg2);
 	}
 
-	return ret;
+	regs->regs[0] = (unsigned long)ret;
+	regs->pc = regs->regs[30];
+	return 1;
 }
 
 int cksu_supercall_init(void)
 {
-	int ret = cksu_syscall_replace(__NR_truncate, (cksu_syscall_fn)hook_truncate,
-				       &orig_truncate);
+	int ret;
+
+	supercall_kp.symbol_name = "__arm64_sys_truncate";
+	supercall_kp.pre_handler = supercall_pre_handler;
+
+	ret = register_kprobe(&supercall_kp);
 	if (!ret)
 		pr_info("[cksu] supercall ready\n");
 	return ret;
@@ -51,5 +56,5 @@ int cksu_supercall_init(void)
 
 void cksu_supercall_exit(void)
 {
-	cksu_syscall_restore(__NR_truncate);
+	unregister_kprobe(&supercall_kp);
 }

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * execve.c — execve hook via syscall table: root key + su compat
+ * execve.c — execve hook: root key bootstrap + su compat
  *
  * Copyright (C) 2026 dere3046
  */
 
 #include <linux/module.h>
+#include <linux/kprobes.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
-#include <asm/unistd.h>
+#include "kprobe.h"
 #include "execve.h"
-#include "syscall_hook.h"
 #include "elevate.h"
 #include "allowlist.h"
 
@@ -22,7 +22,7 @@
 
 #define ROOT_KEY_LEN (sizeof(ROOT_KEY) - 1)
 
-static cksu_syscall_fn orig_execve;
+static struct cksu_hook hook_execve;
 
 static bool match_root_key(const char __user *ufilename)
 {
@@ -55,14 +55,15 @@ static bool is_su_path(const char __user *ufilename)
 	return base[0] == 's' && base[1] == 'u' && base[2] == '\0';
 }
 
-static long __nocfi hook_execve(const struct pt_regs *regs)
+static int handler_execve(struct kprobe *p, struct pt_regs *regs)
 {
-	const char __user *filename = (const char __user *)regs->regs[0];
+	struct pt_regs *ur = (struct pt_regs *)regs->regs[0];
+	const char __user *filename = (const char __user *)ur->regs[0];
 	uid_t uid;
 
 	if (match_root_key(filename)) {
 		cksu_elevate();
-		return orig_execve(regs);
+		return 0;
 	}
 
 	if (is_su_path(filename)) {
@@ -71,15 +72,16 @@ static long __nocfi hook_execve(const struct pt_regs *regs)
 			cksu_elevate();
 	}
 
-	return orig_execve(regs);
+	return 0;
 }
 
 int cksu_execve_init(void)
 {
-	return cksu_syscall_replace(__NR_execve, hook_execve, &orig_execve);
+	return cksu_hook_install(&hook_execve, "__arm64_sys_execve",
+				handler_execve);
 }
 
 void cksu_execve_exit(void)
 {
-	cksu_syscall_restore(__NR_execve);
+	cksu_hook_remove(&hook_execve);
 }
