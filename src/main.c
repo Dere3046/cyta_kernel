@@ -14,8 +14,6 @@
 #include "auth.h"
 #include "supercall.h"
 #include "allowlist.h"
-#include "patch_memory.h"
-#include "syscall_hook.h"
 #include "selinux.h"
 #include "audit.h"
 #include "execve.h"
@@ -36,28 +34,15 @@ static int __init cksu_init(void)
 
 	find_kallsyms_base();
 	ksymless_cache_kln();
-	cksu_patch_memory_init();
 
 	cksu_auth_init(superkey);
 	cksu_allowlist_init();
 
-	ret = cksu_syscall_hook_init();
+	ret = cksu_supercall_init();
 	if (ret) {
-		pr_err("[cksu] syscall hook init failed: %d\n", ret);
+		pr_err("[cksu] supercall init failed: %d\n", ret);
 		return ret;
 	}
-
-	ret = cksu_supercall_init();
-	if (ret)
-		pr_warn("[cksu] supercall failed: %d\n", ret);
-
-	ret = cksu_execve_init();
-	if (ret)
-		pr_warn("[cksu] execve hook failed: %d\n", ret);
-
-	ret = cksu_access_init();
-	if (ret)
-		pr_warn("[cksu] access hook failed: %d\n", ret);
 
 	ret = cksu_selinux_init();
 	if (ret)
@@ -67,18 +52,25 @@ static int __init cksu_init(void)
 	if (ret)
 		pr_warn("[cksu] audit hook failed: %d\n", ret);
 
+	ret = cksu_execve_init();
+	if (ret)
+		pr_warn("[cksu] execve hook failed: %d\n", ret);
+
+	ret = cksu_access_init();
+	if (ret)
+		pr_warn("[cksu] access hook failed: %d\n", ret);
+
 	pr_info("[cksu] ready\n");
 	return 0;
 }
 
 static void __exit cksu_exit(void)
 {
-	cksu_audit_exit();
-	cksu_selinux_exit();
 	cksu_access_exit();
 	cksu_execve_exit();
+	cksu_audit_exit();
+	cksu_selinux_exit();
 	cksu_supercall_exit();
-	cksu_syscall_hook_exit();
 	cksu_allowlist_exit();
 	pr_info("[cksu] exit\n");
 }
