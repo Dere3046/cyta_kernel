@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/ylarod/ddk:android16-6.12
@@ -19,7 +19,39 @@ jobs:
         run: make
       - uses: actions/upload-artifact@v4
         with:
-          name: cksu-android16-6.12
+          name: kernel-modules
           path: |
             cksu.ko
             lkmloader/lkmloader.ko
+
+  build-csud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+      - name: Build csud
+        run: cd csud && cargo ndk -t arm64-v8a build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: csud
+          path: csud/target/aarch64-linux-android/release/csud
+
+  build-cksu-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build cksu-patch
+        run: cd cksu-patch && cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cksu-patch
+          path: cksu-patch/target/release/cksu-patch

@@ -1,0 +1,9 @@
+[package]
+name = "cksu-patch"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+myboot = { git = "https://github.com/Dere3046/my_Androidboot", package = "myboot" }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
