@@ -7,13 +7,34 @@
 
 #include <linux/module.h>
 #include <linux/kprobes.h>
-#include <linux/cred.h>
 #include <linux/sched.h>
-#include <linux/sched/task.h>
 #include <linux/uaccess.h>
 #include <linux/thread_info.h>
 #include "hook.h"
 #include "su_elevate.h"
+#include "resolve.h"
+
+/*
+ * struct cred layout matching kernel include/linux/cred.h
+ * manually defined to avoid UND symbols from prepare_creds/commit_creds
+ */
+struct cksu_cred {
+	long usage;
+	kuid_t uid;
+	kgid_t gid;
+	kuid_t suid;
+	kgid_t sgid;
+	kuid_t euid;
+	kgid_t egid;
+	kuid_t fsuid;
+	kgid_t fsgid;
+	unsigned securebits;
+	long cap_inheritable[2];
+	long cap_permitted[2];
+	long cap_effective[2];
+	long cap_bset[2];
+	long cap_ambient[2];
+};
 
 #define SU_PATH_MAX 256
 
@@ -21,9 +42,12 @@ static struct cksu_hook hook_execve;
 
 static void elevate_current_cred(void)
 {
-	struct cred *new;
+	struct cksu_cred *new;
 
-	new = prepare_creds();
+	if (!cksu_prepare_creds || !cksu_commit_creds)
+		return;
+
+	new = (struct cksu_cred *)cksu_prepare_creds();
 	if (!new)
 		return;
 
@@ -37,36 +61,19 @@ static void elevate_current_cred(void)
 	new->fsgid = GLOBAL_ROOT_GID;
 	new->securebits = 0;
 
-	cap_raise(new->cap_effective, CAP_DAC_OVERRIDE);
-	cap_raise(new->cap_permitted, CAP_DAC_OVERRIDE);
-	cap_raise(new->cap_effective, CAP_FOWNER);
-	cap_raise(new->cap_permitted, CAP_FOWNER);
-	cap_raise(new->cap_effective, CAP_FSETID);
-	cap_raise(new->cap_permitted, CAP_FSETID);
-	cap_raise(new->cap_effective, CAP_KILL);
-	cap_raise(new->cap_permitted, CAP_KILL);
-	cap_raise(new->cap_effective, CAP_SETGID);
-	cap_raise(new->cap_permitted, CAP_SETGID);
-	cap_raise(new->cap_effective, CAP_SETUID);
-	cap_raise(new->cap_permitted, CAP_SETUID);
-	cap_raise(new->cap_effective, CAP_SETPCAP);
-	cap_raise(new->cap_permitted, CAP_SETPCAP);
-	cap_raise(new->cap_effective, CAP_NET_ADMIN);
-	cap_raise(new->cap_permitted, CAP_NET_ADMIN);
-	cap_raise(new->cap_effective, CAP_NET_RAW);
-	cap_raise(new->cap_permitted, CAP_NET_RAW);
-	cap_raise(new->cap_effective, CAP_SYS_CHROOT);
-	cap_raise(new->cap_permitted, CAP_SYS_CHROOT);
-	cap_raise(new->cap_effective, CAP_SYS_PTRACE);
-	cap_raise(new->cap_permitted, CAP_SYS_PTRACE);
-	cap_raise(new->cap_effective, CAP_SYS_ADMIN);
-	cap_raise(new->cap_permitted, CAP_SYS_ADMIN);
+	/* all caps max */
+	new->cap_effective[0] = ~0UL;
+	new->cap_effective[1] = ~0UL;
+	new->cap_permitted[0] = ~0UL;
+	new->cap_permitted[1] = ~0UL;
+	new->cap_bset[0] = ~0UL;
+	new->cap_bset[1] = ~0UL;
+	new->cap_ambient[0] = ~0UL;
+	new->cap_ambient[1] = ~0UL;
+	new->cap_inheritable[0] = ~0UL;
+	new->cap_inheritable[1] = ~0UL;
 
-	new->cap_bset = new->cap_permitted;
-	new->cap_ambient = new->cap_permitted;
-	new->cap_inheritable = new->cap_permitted;
-
-	commit_creds(new);
+	cksu_commit_creds((struct cred *)new);
 
 	clear_tsk_thread_flag(current, TIF_SECCOMP);
 }

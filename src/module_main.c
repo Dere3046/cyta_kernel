@@ -8,7 +8,7 @@
 #include <linux/printk.h>
 #include <linux/init.h>
 
-#include "ksymless_core.h"
+#include "resolve.h"
 #include "ksymless_verify.h"
 #include "selinux_bypass.h"
 #include "su_elevate.h"
@@ -17,7 +17,6 @@
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("CKSU");
 MODULE_AUTHOR("dere3046");
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 
 static int __init cksu_init(void)
 {
@@ -25,9 +24,9 @@ static int __init cksu_init(void)
 
 	pr_info("[cksu] init\n");
 
-	find_kallsyms_base();
-	dump_kallsyms_layout();
-	verify_kallsyms();
+	ret = cksu_resolve_init();
+	if (ret)
+		return ret;
 
 	unsigned long avc_addr = kallsyms_name_to_addr("avc_denied");
 	unsigned long execve_addr = kallsyms_name_to_addr("__arm64_sys_execve");
