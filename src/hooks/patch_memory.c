@@ -10,10 +10,18 @@
 #include <linux/mm.h>
 #include <linux/stop_machine.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 #include <asm/cacheflush.h>
 #include <asm-generic/fixmap.h>
 #include "patch_memory.h"
 #include "ksymless.h"
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#define cksu_flush_dcache(addr, sz) \
+	dcache_clean_inval_poc((unsigned long)(addr), (unsigned long)(addr) + (sz))
+#else
+#define cksu_flush_dcache(addr, sz) __flush_dcache_area((void *)(addr), (sz))
+#endif
 
 static struct mm_struct *mm_ptr;
 
@@ -78,12 +86,12 @@ static int patch_text_cb(void *arg)
 			goto done;
 		}
 
-		map = set_fixmap_offset(FIX_TEXT_POKE0, phys);
+		map = (void *)set_fixmap_offset(FIX_TEXT_POKE0, phys);
 		ret = (int)copy_to_kernel_nofault(map, p->src, p->len);
 		clear_fixmap(FIX_TEXT_POKE0);
 
 		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE))
-			__flush_dcache_area(p->dst, p->len);
+			cksu_flush_dcache(p->dst, p->len);
 done:
 		atomic_inc(&p->cpu_count);
 	} else {
