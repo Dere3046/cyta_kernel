@@ -82,7 +82,7 @@ struct patch_info {
 	atomic_t cpu_count;
 };
 
-static int patch_text_cb(void *arg)
+static int __nocfi patch_text_cb(void *arg)
 {
 	struct patch_info *p = arg;
 	unsigned long phys, fixmap_va;
