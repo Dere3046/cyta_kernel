@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Derived from KernelSU (GPL-2.0)
+/*
+ * patch_memory.c — fixmap-based kernel memory patching for ARM64
+ *
+ * Copyright (C) 2023 bmax121
+ * Copyright (C) 2026 dere3046
+ */
+
+#include <linux/mm.h>
+#include <linux/stop_machine.h>
+#include <linux/uaccess.h>
+#include <asm/cacheflush.h>
+#include <asm-generic/fixmap.h>
+#include "patch_memory.h"
+#include "ksymless.h"
+
+static struct mm_struct *mm_ptr;
+
+void cksu_patch_memory_init(void)
+{
+	mm_ptr = (struct mm_struct *)kallsyms_name_to_addr("init_mm");
+}
+
+static unsigned long virt_to_phys_walk(unsigned long addr)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	if (!mm_ptr)
+		return 0;
+
+	pgd = pgd_offset(mm_ptr, addr);
+	if (pgd_none(*pgd) || pgd_bad(*pgd))
+		return 0;
+
+	p4d = p4d_offset(pgd, addr);
+	if (p4d_none(*p4d) || p4d_bad(*p4d))
+		return 0;
+
+	pud = pud_offset(p4d, addr);
+	if (pud_none(*pud) || pud_bad(*pud))
+		return 0;
+
+	pmd = pmd_offset(pud, addr);
+	if (pmd_none(*pmd) || pmd_bad(*pmd))
+		return 0;
+
+	pte = pte_offset_kernel(pmd, addr);
+	if (!pte || !pte_present(*pte))
+		return 0;
+
+	return __pte_to_phys(*pte) + (addr & ~PAGE_MASK);
+}
+
+struct patch_info {
+	void *dst;
+	void *src;
+	size_t len;
+	int flags;
+	atomic_t cpu_count;
+};
+
+static int patch_text_cb(void *arg)
+{
+	struct patch_info *p = arg;
+	unsigned long phys;
+	void *map;
+	int ret = 0;
+
+	if (atomic_inc_return(&p->cpu_count) == num_online_cpus()) {
+		phys = virt_to_phys_walk((unsigned long)p->dst);
+		if (!phys) {
+			ret = -ENOENT;
+			goto done;
+		}
+
+		map = set_fixmap_offset(FIX_TEXT_POKE0, phys);
+		ret = (int)copy_to_kernel_nofault(map, p->src, p->len);
+		clear_fixmap(FIX_TEXT_POKE0);
+
+		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE))
+			__flush_dcache_area(p->dst, p->len);
+done:
+		atomic_inc(&p->cpu_count);
+	} else {
+		while (atomic_read(&p->cpu_count) <= num_online_cpus())
+			cpu_relax();
+		isb();
+	}
+
+	return ret;
+}
+
+int cksu_patch_text(void *dst, void *src, size_t len, int flags)
+{
+	struct patch_info info = {
+		.dst = dst,
+		.src = src,
+		.len = len,
+		.flags = flags,
+		.cpu_count = ATOMIC_INIT(0),
+	};
+
+	return stop_machine(patch_text_cb, &info, cpu_online_mask);
+}
