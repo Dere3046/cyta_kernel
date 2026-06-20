@@ -15,18 +15,17 @@
 #include <linux/tracepoint.h>
 #include <linux/version.h>
 #include <asm/syscall.h>
-#include <trace/events/syscalls.h>
 #include "syscall_hook.h"
 #include "patch_memory.h"
 #include "ksymless.h"
 
-// ARM64: store/retrieve original syscall NR in x8 (user syscall register)
 #define ORIG_NR(r) ((r)->regs[8])
 
 syscall_fn_t *cksu_sct;
 static int dispatcher_nr = -1;
 static cksu_syscall_hook_fn syscall_hooks[__NR_syscalls];
 static syscall_fn_t orig_ni_fn;
+static struct tracepoint *tp_sys_enter;
 
 static long cksu_syscall_dispatcher(const struct pt_regs *regs)
 {
@@ -65,6 +64,8 @@ static void sys_enter_handler(void *data, struct pt_regs *regs, long id)
 		return;
 
 	kregs = task_pt_regs(current);
+	if (!kregs)
+		return;
 	kregs->regs[8] = id;
 	kregs->syscallno = dispatcher_nr;
 }
@@ -102,18 +103,21 @@ int cksu_syscall_hook_init(void)
 	syscall_fn_t dispatcher_fn;
 	int ret;
 
+	pr_info("[cksu] syscall_hook: step 1 resolve sct\n");
 	cksu_sct = (syscall_fn_t *)kallsyms_name_to_addr("sys_call_table");
 	if (!cksu_sct) {
 		pr_err("[cksu] sys_call_table not found\n");
 		return -ENOENT;
 	}
 
+	pr_info("[cksu] syscall_hook: step 2 resolve ni_syscall\n");
 	ni_addr = kallsyms_name_to_addr("__arm64_sys_ni_syscall");
 	if (!ni_addr) {
 		pr_err("[cksu] sys_ni_syscall not found\n");
 		return -ENOENT;
 	}
 
+	pr_info("[cksu] syscall_hook: step 3 find slot\n");
 	for (int i = 0; i < __NR_syscalls; i++) {
 		if ((unsigned long)cksu_sct[i] == ni_addr) {
 			slot = i;
@@ -125,6 +129,7 @@ int cksu_syscall_hook_init(void)
 		return -ENOENT;
 	}
 
+	pr_info("[cksu] syscall_hook: step 4 patch slot %d\n", slot);
 	dispatcher_nr = slot;
 	orig_ni_fn = cksu_sct[slot];
 	dispatcher_fn = (syscall_fn_t)cksu_syscall_dispatcher;
@@ -137,28 +142,42 @@ int cksu_syscall_hook_init(void)
 		return ret;
 	}
 
+	pr_info("[cksu] syscall_hook: step 5 resolve tracepoint\n");
+	tp_sys_enter = (struct tracepoint *)kallsyms_name_to_addr("__tracepoint_sys_enter");
+	if (!tp_sys_enter) {
+		pr_err("[cksu] __tracepoint_sys_enter not found\n");
+		cksu_patch_text(&cksu_sct[slot], &orig_ni_fn, sizeof(orig_ni_fn),
+				CKSU_PATCH_FLUSH_DCACHE);
+		dispatcher_nr = -1;
+		return -ENOENT;
+	}
+
+	pr_info("[cksu] syscall_hook: step 6 register tracepoint\n");
 	memset(syscall_hooks, 0, sizeof(syscall_hooks));
 
-	ret = register_trace_sys_enter(sys_enter_handler, NULL);
+	ret = tracepoint_probe_register(tp_sys_enter, (void *)sys_enter_handler, NULL);
 	if (ret) {
-		pr_err("[cksu] register sys_enter tracepoint failed: %d\n", ret);
+		pr_err("[cksu] tracepoint register failed: %d\n", ret);
 		cksu_patch_text(&cksu_sct[slot], &orig_ni_fn, sizeof(orig_ni_fn),
 				CKSU_PATCH_FLUSH_DCACHE);
 		dispatcher_nr = -1;
 		return ret;
 	}
 
+	pr_info("[cksu] syscall_hook: step 7 mark processes\n");
 	mark_all_processes();
 
-	pr_info("[cksu] syscall_hook: table=0x%lx slot=%d tracepoint=ok\n",
-		(unsigned long)cksu_sct, slot);
+	pr_info("[cksu] syscall_hook: table=0x%lx slot=%d tp=0x%lx done\n",
+		(unsigned long)cksu_sct, slot, (unsigned long)tp_sys_enter);
 	return 0;
 }
 
 void cksu_syscall_hook_exit(void)
 {
-	unregister_trace_sys_enter(sys_enter_handler, NULL);
-	tracepoint_synchronize_unregister();
+	if (tp_sys_enter) {
+		tracepoint_probe_unregister(tp_sys_enter, (void *)sys_enter_handler, NULL);
+		tracepoint_synchronize_unregister();
+	}
 
 	if (dispatcher_nr >= 0 && cksu_sct) {
 		cksu_patch_text(&cksu_sct[dispatcher_nr], &orig_ni_fn,
