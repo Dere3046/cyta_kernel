@@ -57,11 +57,14 @@ bool cksu_auth_verify(const u8 *response)
 	u8 buf[CKSU_KEY_MAX + CKSU_NONCE_LEN];
 	int key_len, rc;
 
-	if (!nonce_valid)
+	if (!nonce_valid) {
+		pr_warn("[cksu] auth: no valid nonce\n");
 		return false;
+	}
 
 	if (ktime_ms_delta(ktime_get(), nonce_created) > NONCE_TIMEOUT_MS) {
 		nonce_valid = false;
+		pr_warn("[cksu] auth: nonce timeout\n");
 		return false;
 	}
 
@@ -74,6 +77,10 @@ bool cksu_auth_verify(const u8 *response)
 	cksu_sha256(buf, key_len + CKSU_NONCE_LEN, expected);
 
 	rc = cksu_memneq(expected, response, CKSU_HASH_LEN);
+
+	if (rc)
+		pr_warn("[cksu] auth: hash mismatch (key_len=%d)\n", key_len);
+
 	memzero_explicit(buf, sizeof(buf));
 	memzero_explicit(expected, sizeof(expected));
 
