@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
+#include <linux/ptrace.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
 #include <asm/unistd.h>
