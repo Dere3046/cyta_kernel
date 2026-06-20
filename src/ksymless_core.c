@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
- * core.c
+ * ksymless_core.c — kallsyms data discovery
  *
  * Copyright (C) 2026 dere3046
  */
@@ -10,7 +9,7 @@
 #include <linux/uaccess.h>
 #include <linux/kallsyms.h>
 #include <asm/compiler.h>
-#include "core.h"
+#include "ksymless_core.h"
 
 /* === stack helpers === */
 

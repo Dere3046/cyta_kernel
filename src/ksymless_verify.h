@@ -1,12 +1,9 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
- * verify.h
- *
- * Copyright (C) 2026 dere3046
+ * ksymless_verify.h
  */
 
-#ifndef VERIFY_H
-#define VERIFY_H
+#ifndef CKSU_KSYMLESS_VERIFY_H
+#define CKSU_KSYMLESS_VERIFY_H
 
 unsigned long resolve(const char *name);
 void verify_sct(void);

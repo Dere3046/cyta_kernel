@@ -1,12 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
- * core.h
+ * ksymless_core.h
  *
  * Copyright (C) 2026 dere3046
  */
 
-#ifndef CORE_H
-#define CORE_H
+#ifndef CKSU_KSYMLESS_CORE_H
+#define CKSU_KSYMLESS_CORE_H
 
 #include <linux/types.h>
 

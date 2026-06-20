@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
- * verify.c
+ * ksymless_verify.c — verify kallsyms resolution
  *
  * Copyright (C) 2026 dere3046
  */
@@ -9,8 +8,8 @@
 #include <linux/printk.h>
 #include <linux/kprobes.h>
 #include <linux/kallsyms.h>
-#include "core.h"
-#include "verify.h"
+#include "ksymless_core.h"
+#include "ksymless_verify.h"
 
 unsigned long resolve(const char *name)
 {
