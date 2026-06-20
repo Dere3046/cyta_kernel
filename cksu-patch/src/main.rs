@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 use anyhow::Result;
 use clap::Parser;
-use myboot::compress::{get_decoder, is_compressed};
+use myboot::compress::{get_decoder, is_compressed, parse_compress_format};
 use myboot::cpio::{Cpio, CpioEntry};
 use myboot::parser::BootImage;
 use myboot::patcher::BootImagePatchOption;
@@ -52,8 +52,9 @@ fn patch(input: &PathBuf, output: &PathBuf, ko: &PathBuf, loader: &PathBuf, wrap
         .ok_or_else(|| anyhow::anyhow!("no ramdisk found"))?;
 
     let ramdisk_raw = ramdisk_block.data;
-    let ramdisk_data = if is_compressed(ramdisk_raw) {
-        let mut decoder = get_decoder(ramdisk_raw)?;
+    let fmt = parse_compress_format(ramdisk_raw);
+    let ramdisk_data = if is_compressed(fmt) {
+        let mut decoder = get_decoder(fmt, ramdisk_raw)?;
         let mut buf = Vec::new();
         std::io::Read::read_to_end(&mut decoder, &mut buf)?;
         buf
@@ -79,9 +80,9 @@ fn patch(input: &PathBuf, output: &PathBuf, ko: &PathBuf, loader: &PathBuf, wrap
     cpio.dump(&mut cpio_out)?;
 
     let mut out_buf = Cursor::new(Vec::new());
-    BootImagePatchOption::new(&boot)
-        .replace_ramdisk(cpio_out)
-        .patch(&mut out_buf)?;
+    let mut patcher = BootImagePatchOption::new(&boot);
+    patcher.replace_ramdisk(cpio_out);
+    patcher.patch(&mut out_buf)?;
 
     fs::write(output, out_buf.into_inner())?;
     eprintln!("patched: {}", output.display());
