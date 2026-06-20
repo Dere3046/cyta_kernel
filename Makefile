@@ -4,11 +4,13 @@ $(MODULE_NAME)-objs := src/ksymless/ksymless.o src/hooks/kprobe.o \
 	src/hooks/selinux.o src/hooks/elevate.o src/hooks/audit.o src/main.o
 obj-m := $(MODULE_NAME).o
 
-ccflags-y += -Isrc -Isrc/ksymless -Isrc/hooks
+ccflags-y += -I$(src)/src -I$(src)/src/ksymless -I$(src)/src/hooks
 ccflags-y += -Wno-declaration-after-statement
 ccflags-y += -Wno-unused-variable
 ccflags-y += -Wno-unused-function
 ccflags-y += -Wno-strict-prototypes
+ccflags-y += -Wno-gcc-compat
+ccflags-y += -std=gnu11
 
 KDIR ?= /home/Dere3046/code/cyta/kernel
 PWD := $(shell pwd)
