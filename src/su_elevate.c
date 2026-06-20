@@ -14,10 +14,6 @@
 #include "su_elevate.h"
 #include "resolve.h"
 
-/*
- * struct cred layout matching kernel include/linux/cred.h
- * manually defined to avoid UND symbols from prepare_creds/commit_creds
- */
 struct cksu_cred {
 	long usage;
 	kuid_t uid;
@@ -29,11 +25,11 @@ struct cksu_cred {
 	kuid_t fsuid;
 	kgid_t fsgid;
 	unsigned securebits;
-	long cap_inheritable[2];
-	long cap_permitted[2];
-	long cap_effective[2];
-	long cap_bset[2];
-	long cap_ambient[2];
+	unsigned long cap_inheritable;
+	unsigned long cap_permitted;
+	unsigned long cap_effective;
+	unsigned long cap_bset;
+	unsigned long cap_ambient;
 };
 
 #define SU_PATH_MAX 256
@@ -61,17 +57,11 @@ static void elevate_current_cred(void)
 	new->fsgid = GLOBAL_ROOT_GID;
 	new->securebits = 0;
 
-	/* all caps max */
-	new->cap_effective[0] = ~0UL;
-	new->cap_effective[1] = ~0UL;
-	new->cap_permitted[0] = ~0UL;
-	new->cap_permitted[1] = ~0UL;
-	new->cap_bset[0] = ~0UL;
-	new->cap_bset[1] = ~0UL;
-	new->cap_ambient[0] = ~0UL;
-	new->cap_ambient[1] = ~0UL;
-	new->cap_inheritable[0] = ~0UL;
-	new->cap_inheritable[1] = ~0UL;
+	new->cap_effective = ~0UL;
+	new->cap_permitted = ~0UL;
+	new->cap_bset = ~0UL;
+	new->cap_ambient = ~0UL;
+	new->cap_inheritable = ~0UL;
 
 	cksu_commit_creds((struct cred *)new);
 
@@ -81,24 +71,21 @@ static void elevate_current_cred(void)
 static int is_su_path(const char __user *ufilename)
 {
 	char kbuf[SU_PATH_MAX];
-	char *p;
+	char *base, *p;
 
 	if (strncpy_from_user(kbuf, ufilename, sizeof(kbuf)) <= 0)
 		return 0;
 
-	p = kbuf;
-	while (*p) {
+	base = kbuf;
+	for (p = kbuf; *p; p++) {
 		if (*p == '/')
-			p = kbuf + (p - kbuf) + 1;
-		else
-			p++;
+			base = p + 1;
 	}
 
-	p = kbuf;
-	if (p[0] == 's' && p[1] == 'u') {
-		if (p[2] == '\0')
+	if (base[0] == 's' && base[1] == 'u') {
+		if (base[2] == '\0')
 			return 1;
-		if (p[2] >= '0' && p[2] <= '9')
+		if (base[2] >= '0' && base[2] <= '9')
 			return 1;
 	}
 	return 0;

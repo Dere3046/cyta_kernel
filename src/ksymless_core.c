@@ -457,15 +457,20 @@ int expand_sym(unsigned int off, char *buf, int max)
 		if (safe_read(&ti, (const void *)(klindex_addr + c * 2), 2))
 			return 0;
 		unsigned int ti_idx = ti;
-		const char *tptr = (const char *)(kltable_addr + ti_idx);
-		while (*tptr) {
+		unsigned long tptr_addr = kltable_addr + ti_idx;
+		unsigned char ch;
+		while (1) {
+			if (safe_read(&ch, (const void *)tptr_addr, 1))
+				return 0;
+			if (!ch)
+				break;
 			if (skipped) {
-				*buf++ = *tptr;
+				*buf++ = ch;
 				max--;
 			} else {
 				skipped = 1;
 			}
-			tptr++;
+			tptr_addr++;
 		}
 	}
 	if (max)

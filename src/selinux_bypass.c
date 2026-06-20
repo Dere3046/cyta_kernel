@@ -18,6 +18,7 @@ static int handler_avc_denied(struct kprobe *p, struct pt_regs *regs)
 {
 	if (uid_eq(current_uid(), GLOBAL_ROOT_UID)) {
 		regs->regs[0] = 0;
+		regs->pc = regs->regs[30];
 		return 1;
 	}
 	return 0;
