@@ -20,7 +20,8 @@
 #include "patch_memory.h"
 #include "ksymless.h"
 
-#define PT_REGS_ORIG_SYSCALL(regs) ((regs)->regs[8])
+// ARM64: store/retrieve original syscall NR in x8 (user syscall register)
+#define ORIG_NR(r) ((r)->regs[8])
 
 syscall_fn_t *cksu_sct;
 static int dispatcher_nr = -1;
@@ -34,12 +35,12 @@ static long cksu_syscall_dispatcher(const struct pt_regs *regs)
 	if (regs->syscallno != dispatcher_nr)
 		return -ENOSYS;
 
-	orig_nr = (int)PT_REGS_ORIG_SYSCALL(regs);
+	orig_nr = (int)ORIG_NR(regs);
 	if (regs->syscallno == orig_nr)
 		return -ENOSYS;
 
 	((struct pt_regs *)regs)->syscallno = orig_nr;
-	PT_REGS_ORIG_SYSCALL((struct pt_regs *)regs) = orig_nr;
+	((struct pt_regs *)regs)->regs[8] = orig_nr;
 
 	if (likely(orig_nr >= 0 && orig_nr < __NR_syscalls)) {
 		cksu_syscall_hook_fn fn = READ_ONCE(syscall_hooks[orig_nr]);
@@ -52,18 +53,20 @@ static long cksu_syscall_dispatcher(const struct pt_regs *regs)
 
 static void sys_enter_handler(void *data, struct pt_regs *regs, long id)
 {
-	struct pt_regs *real_regs;
+	struct pt_regs *kregs;
 
 	if (unlikely(is_compat_task()))
 		return;
 	if (dispatcher_nr < 0)
 		return;
+	if (id < 0 || id >= __NR_syscalls)
+		return;
 	if (!READ_ONCE(syscall_hooks[id]))
 		return;
 
-	real_regs = task_pt_regs(current);
-	PT_REGS_ORIG_SYSCALL(real_regs) = id;
-	real_regs->syscallno = dispatcher_nr;
+	kregs = task_pt_regs(current);
+	kregs->regs[8] = id;
+	kregs->syscallno = dispatcher_nr;
 }
 
 static void mark_all_processes(void)
