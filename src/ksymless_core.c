@@ -511,7 +511,9 @@ unsigned int get_sym_offset(unsigned int seq)
 	return p - (const u8 *)klnames_addr;
 }
 
-unsigned long kallsyms_name_to_addr(const char *name)
+static unsigned long (*kln_cached)(const char *name);
+
+static unsigned long ksymless_bsearch(const char *name)
 {
 	int low = 0, high = (int)klnum_val - 1;
 	char nbuf[256];
@@ -530,6 +532,22 @@ unsigned long kallsyms_name_to_addr(const char *name)
 			return sym_addr(seq);
 	}
 	return 0;
+}
+
+unsigned long kallsyms_name_to_addr(const char *name)
+{
+	if (kln_cached)
+		return kln_cached(name);
+	return ksymless_bsearch(name);
+}
+
+void ksymless_cache_kln(void)
+{
+	unsigned long addr = ksymless_bsearch("kallsyms_lookup_name");
+	if (addr) {
+		kln_cached = (typeof(kln_cached))addr;
+		pr_info("[ksymless] cached kallsyms_lookup_name @ 0x%lx\n", addr);
+	}
 }
 
 int sym_name_at(unsigned long addr, char *buf, int max)

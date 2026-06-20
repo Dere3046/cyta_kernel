@@ -1,5 +1,5 @@
 MODULE_NAME := cksu
-$(MODULE_NAME)-objs := src/ksymless_core.o src/ksymless_verify.o src/resolve.o src/hook.o src/selinux_bypass.o src/su_elevate.o src/audit_filter.o src/module_main.o
+$(MODULE_NAME)-objs := src/ksymless_core.o src/hook.o src/selinux_bypass.o src/su_elevate.o src/audit_filter.o src/module_main.o
 obj-m := $(MODULE_NAME).o
 
 ccflags-y += -Isrc

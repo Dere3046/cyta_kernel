@@ -1,102 +1,70 @@
 /*
- * su_elevate.c — hook __arm64_sys_execve, elevate su to root
+ * su_elevate.c — hook __arm64_sys_execve, root key trigger
  *
- * prepare_exec_creds() copies from current->cred, so we modify
- * it before exec path reaches begin_new_exec().
+ * Userspace calls: syscall(__NR_execve, ROOT_KEY, NULL, NULL)
+ * The hook elevates current->cred to root, then execve fails
+ * with -ENOENT (file not found). Caller is now uid=0.
  */
 
 #include <linux/module.h>
 #include <linux/kprobes.h>
+#include <linux/cred.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
+#include <linux/string.h>
 #include <linux/thread_info.h>
 #include "hook.h"
 #include "su_elevate.h"
-#include "resolve.h"
 
-struct cksu_cred {
-	long usage;
-	kuid_t uid;
-	kgid_t gid;
-	kuid_t suid;
-	kgid_t sgid;
-	kuid_t euid;
-	kgid_t egid;
-	kuid_t fsuid;
-	kgid_t fsgid;
-	unsigned securebits;
-	unsigned long cap_inheritable;
-	unsigned long cap_permitted;
-	unsigned long cap_effective;
-	unsigned long cap_bset;
-	unsigned long cap_ambient;
-};
+#ifndef ROOT_KEY
+#define ROOT_KEY "cksu_2026_dere3046_f8a3b7c1d9e2x4z6w0q5"
+#endif
 
-#define SU_PATH_MAX 256
+#define ROOT_KEY_LEN (sizeof(ROOT_KEY) - 1)
 
 static struct cksu_hook hook_execve;
 
 static void elevate_current_cred(void)
 {
-	struct cksu_cred *new;
+	struct cred *c = (struct cred *)current->cred;
 
-	if (!cksu_prepare_creds || !cksu_commit_creds)
-		return;
+	c->uid.val = 0;
+	c->gid.val = 0;
+	c->euid.val = 0;
+	c->egid.val = 0;
+	c->suid.val = 0;
+	c->sgid.val = 0;
+	c->fsuid.val = 0;
+	c->fsgid.val = 0;
+	c->securebits = 0;
 
-	new = (struct cksu_cred *)cksu_prepare_creds();
-	if (!new)
-		return;
-
-	new->uid = GLOBAL_ROOT_UID;
-	new->gid = GLOBAL_ROOT_GID;
-	new->euid = GLOBAL_ROOT_UID;
-	new->egid = GLOBAL_ROOT_GID;
-	new->suid = GLOBAL_ROOT_UID;
-	new->sgid = GLOBAL_ROOT_GID;
-	new->fsuid = GLOBAL_ROOT_UID;
-	new->fsgid = GLOBAL_ROOT_GID;
-	new->securebits = 0;
-
-	new->cap_effective = ~0UL;
-	new->cap_permitted = ~0UL;
-	new->cap_bset = ~0UL;
-	new->cap_ambient = ~0UL;
-	new->cap_inheritable = ~0UL;
-
-	cksu_commit_creds((struct cred *)new);
+	memset(&c->cap_effective, 0xFF, sizeof(c->cap_effective));
+	memset(&c->cap_permitted, 0xFF, sizeof(c->cap_permitted));
+	memset(&c->cap_bset, 0xFF, sizeof(c->cap_bset));
+	memset(&c->cap_ambient, 0xFF, sizeof(c->cap_ambient));
+	memset(&c->cap_inheritable, 0xFF, sizeof(c->cap_inheritable));
 
 	clear_tsk_thread_flag(current, TIF_SECCOMP);
 }
 
-static int is_su_path(const char __user *ufilename)
+static int match_root_key(const char __user *ufilename)
 {
-	char kbuf[SU_PATH_MAX];
-	char *base, *p;
+	char kbuf[ROOT_KEY_LEN + 8];
+	long len;
 
-	if (strncpy_from_user(kbuf, ufilename, sizeof(kbuf)) <= 0)
+	len = strncpy_from_user(kbuf, ufilename, sizeof(kbuf));
+	if (len != ROOT_KEY_LEN)
 		return 0;
 
-	base = kbuf;
-	for (p = kbuf; *p; p++) {
-		if (*p == '/')
-			base = p + 1;
-	}
-
-	if (base[0] == 's' && base[1] == 'u') {
-		if (base[2] == '\0')
-			return 1;
-		if (base[2] >= '0' && base[2] <= '9')
-			return 1;
-	}
-	return 0;
+	return memcmp(kbuf, ROOT_KEY, ROOT_KEY_LEN) == 0;
 }
 
 static int handler_execve(struct kprobe *p, struct pt_regs *regs)
 {
 	const char __user *filename = (const char __user *)regs->regs[0];
 
-	if (is_su_path(filename)) {
-		pr_info("[cksu] su elevating uid=%d -> 0\n",
+	if (match_root_key(filename)) {
+		pr_info("[cksu] elevating uid=%d -> 0\n",
 			from_kuid(&init_user_ns, current_uid()));
 		elevate_current_cred();
 	}
@@ -105,6 +73,7 @@ static int handler_execve(struct kprobe *p, struct pt_regs *regs)
 
 int cksu_su_init(void)
 {
+	pr_info("[cksu] root_key=%s\n", ROOT_KEY);
 	return cksu_hook_install(&hook_execve, "__arm64_sys_execve",
 				 handler_execve);
 }

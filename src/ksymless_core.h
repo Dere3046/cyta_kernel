@@ -60,6 +60,7 @@ extern int nv;
 int collect_adrp_pages(unsigned long fn, unsigned long *pages, int max);
 int follow_bl(unsigned long fn, unsigned long *visited, int *nv_cnt, int depth);
 void find_kallsyms_base(void);
+void ksymless_cache_kln(void);
 unsigned long sym_addr(int idx);
 int expand_sym(unsigned int off, char *buf, int max);
 unsigned int get_sym_seq(int idx);

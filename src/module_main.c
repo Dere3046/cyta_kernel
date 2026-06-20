@@ -1,16 +1,12 @@
 /*
  * module_main.c — CKSU entry
- *
- * init: ksymless -> resolve symbols -> install kprobes
  */
 
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/init.h>
 
-#include "resolve.h"
 #include "ksymless_core.h"
-#include "ksymless_verify.h"
 #include "selinux_bypass.h"
 #include "su_elevate.h"
 #include "audit_filter.h"
@@ -25,9 +21,8 @@ static int __init cksu_init(void)
 
 	pr_info("[cksu] init\n");
 
-	ret = cksu_resolve_init();
-	if (ret)
-		return ret;
+	find_kallsyms_base();
+	ksymless_cache_kln();
 
 	unsigned long avc_addr = kallsyms_name_to_addr("avc_denied");
 	unsigned long execve_addr = kallsyms_name_to_addr("__arm64_sys_execve");
