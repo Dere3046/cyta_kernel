@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/kprobes.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/dcache.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
