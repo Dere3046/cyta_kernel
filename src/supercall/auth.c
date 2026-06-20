@@ -9,7 +9,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/timekeeping.h>
-#include <crypto/sha2.h>
+#include "sha256.h"
 #include "auth.h"
 
 static int cksu_memneq(const void *a, const void *b, size_t len)
@@ -71,7 +71,7 @@ bool cksu_auth_verify(const u8 *response)
 	memcpy(buf, superkey, key_len);
 	memcpy(buf + key_len, pending_nonce, CKSU_NONCE_LEN);
 
-	sha256(buf, key_len + CKSU_NONCE_LEN, expected);
+	cksu_sha256(buf, key_len + CKSU_NONCE_LEN, expected);
 
 	rc = cksu_memneq(expected, response, CKSU_HASH_LEN);
 	memzero_explicit(buf, sizeof(buf));
