@@ -56,11 +56,23 @@ static unsigned long virt_to_phys_walk(unsigned long addr)
 		return 0;
 
 	pud = pud_offset(p4d, addr);
-	if (pud_none(*pud) || pud_bad(*pud))
+	if (pud_none(*pud))
+		return 0;
+#if defined(pud_leaf)
+	if (pud_leaf(*pud))
+		return __pud_to_phys(*pud) + (addr & ~PUD_MASK);
+#endif
+	if (pud_bad(*pud))
 		return 0;
 
 	pmd = pmd_offset(pud, addr);
-	if (pmd_none(*pmd) || pmd_bad(*pmd))
+	if (pmd_none(*pmd))
+		return 0;
+#if defined(pmd_leaf)
+	if (pmd_leaf(*pmd))
+		return __pmd_to_phys(*pmd) + (addr & ~PMD_MASK);
+#endif
+	if (pmd_bad(*pmd))
 		return 0;
 
 	pte = pte_offset_kernel(pmd, addr);
