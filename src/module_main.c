@@ -9,6 +9,7 @@
 #include <linux/init.h>
 
 #include "resolve.h"
+#include "ksymless_core.h"
 #include "ksymless_verify.h"
 #include "selinux_bypass.h"
 #include "su_elevate.h"
