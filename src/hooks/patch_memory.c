@@ -9,25 +9,31 @@
 
 #include <linux/mm.h>
 #include <linux/stop_machine.h>
-#include <linux/uaccess.h>
 #include <linux/version.h>
-#include <asm/cacheflush.h>
-#include <asm-generic/fixmap.h>
+#include <asm/fixmap.h>
 #include "patch_memory.h"
 #include "ksymless.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
-#define cksu_flush_dcache(addr, sz) \
-	dcache_clean_inval_poc((unsigned long)(addr), (unsigned long)(addr) + (sz))
-#else
-#define cksu_flush_dcache(addr, sz) __flush_dcache_area((void *)(addr), (sz))
-#endif
-
 static struct mm_struct *mm_ptr;
+static void (*set_fixmap_fn)(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot);
+static long (*copy_nofault_fn)(void *dst, const void *src, size_t size);
+static void (*flush_dcache_fn)(unsigned long start, unsigned long end);
 
 void cksu_patch_memory_init(void)
 {
 	mm_ptr = (struct mm_struct *)kallsyms_name_to_addr("init_mm");
+	set_fixmap_fn = (void *)kallsyms_name_to_addr("__set_fixmap");
+	copy_nofault_fn = (void *)kallsyms_name_to_addr("copy_to_kernel_nofault");
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+	flush_dcache_fn = (void *)kallsyms_name_to_addr("dcache_clean_inval_poc");
+#else
+	flush_dcache_fn = (void *)kallsyms_name_to_addr("__flush_dcache_area");
+#endif
+
+	pr_info("[cksu] patch_memory: mm=0x%lx fixmap=0x%lx copy=0x%lx flush=0x%lx\n",
+		(unsigned long)mm_ptr, (unsigned long)set_fixmap_fn,
+		(unsigned long)copy_nofault_fn, (unsigned long)flush_dcache_fn);
 }
 
 static unsigned long virt_to_phys_walk(unsigned long addr)
@@ -75,8 +81,7 @@ struct patch_info {
 static int patch_text_cb(void *arg)
 {
 	struct patch_info *p = arg;
-	unsigned long phys;
-	void *map;
+	unsigned long phys, fixmap_va;
 	int ret = 0;
 
 	if (atomic_inc_return(&p->cpu_count) == num_online_cpus()) {
@@ -86,12 +91,16 @@ static int patch_text_cb(void *arg)
 			goto done;
 		}
 
-		map = (void *)set_fixmap_offset(FIX_TEXT_POKE0, phys);
-		ret = (int)copy_to_kernel_nofault(map, p->src, p->len);
-		clear_fixmap(FIX_TEXT_POKE0);
+		set_fixmap_fn(FIX_TEXT_POKE0, phys & PAGE_MASK, PAGE_KERNEL);
+		fixmap_va = fix_to_virt(FIX_TEXT_POKE0) + (phys & ~PAGE_MASK);
 
-		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE))
-			cksu_flush_dcache(p->dst, p->len);
+		ret = (int)copy_nofault_fn((void *)fixmap_va, p->src, p->len);
+
+		set_fixmap_fn(FIX_TEXT_POKE0, 0, __pgprot(0));
+
+		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE) && flush_dcache_fn)
+			flush_dcache_fn((unsigned long)p->dst,
+					(unsigned long)p->dst + p->len);
 done:
 		atomic_inc(&p->cpu_count);
 	} else {
@@ -112,6 +121,9 @@ int cksu_patch_text(void *dst, void *src, size_t len, int flags)
 		.flags = flags,
 		.cpu_count = ATOMIC_INIT(0),
 	};
+
+	if (!set_fixmap_fn || !copy_nofault_fn || !mm_ptr)
+		return -ENOSYS;
 
 	return stop_machine(patch_text_cb, &info, cpu_online_mask);
 }
