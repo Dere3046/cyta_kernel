@@ -7,18 +7,22 @@
 
 #include <linux/cred.h>
 #include <linux/sched.h>
-#include <linux/capability.h>
+#include <linux/string.h>
 #include "context.h"
 
 bool cksu_is_blessed(void)
 {
 	const struct cred *c = current->cred;
+	kernel_cap_t full;
 
 	if (c->euid.val != 0)
 		return false;
 	if (c->securebits != 0)
 		return false;
-	if (!cap_isclear(cap_invert(c->cap_effective)))
+
+	memset(&full, 0xFF, sizeof(full));
+	if (memcmp(&c->cap_effective, &full, sizeof(full)) != 0)
 		return false;
+
 	return true;
 }
