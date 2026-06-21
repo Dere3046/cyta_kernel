@@ -46,8 +46,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		return cksu_allowlist_add((uid_t)a1);
 
 	case CKSU_REMOVE_UID:
@@ -55,8 +54,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		return cksu_allowlist_remove((uid_t)a1);
 
 	case CKSU_GET_LIST:
@@ -64,8 +62,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		return cksu_allowlist_get((uid_t __user *)a1, (int)a2);
 
 	case CKSU_SET_KEY:
@@ -73,8 +70,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		cksu_auth_init((const char __user *)a1);
 		return 0;
 
@@ -83,8 +79,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		return cksu_virt_load_rules(
 			(const struct cksu_sepolicy_cmd __user *)a1, (int)a2);
 
@@ -93,8 +88,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		cksu_virt_clear_all();
 		return 0;
 
@@ -103,8 +97,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		return cksu_virt_set_domain((uid_t)a1, (u32)a2);
 
 	case CKSU_REPORT_EVENT:
@@ -112,8 +105,7 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EINVAL;
 		if (!cksu_auth_verify((const u8 *)arg0))
 			return -EPERM;
-		if (!cksu_is_blessed())
-			return -EPERM;
+
 		return 0;
 	}
 

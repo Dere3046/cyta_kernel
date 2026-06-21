@@ -117,6 +117,18 @@ fn main() {
             let uid: u32 = cmd_args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             supercall::remove_uid(&key, uid).map(|_| println!("removed {uid}"))
         }
+        "list" => {
+            match supercall::get_list(&key) {
+                Ok(uids) => {
+                    println!("allowlist ({}):", uids.len());
+                    for uid in &uids {
+                        println!("  {uid}");
+                    }
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
+        }
         "post-fs-data" | "services" | "boot-completed" => {
             println!("csud: {cmd} (not implemented yet)");
             Ok(())

@@ -59,3 +59,12 @@ pub fn remove_uid(key: &str, uid: u32) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+pub fn get_list(key: &str) -> anyhow::Result<Vec<u32>> {
+    let mut buf = [0u32; 256];
+    let ret = auth_call(key, CKSU_GET_LIST, buf.as_mut_ptr() as i64, 256)?;
+    if ret < 0 {
+        anyhow::bail!("get_list failed: {ret}");
+    }
+    Ok(buf[..ret as usize].to_vec())
+}
