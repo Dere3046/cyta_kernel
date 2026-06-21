@@ -19,7 +19,7 @@ jobs:
         run: make
       - uses: actions/upload-artifact@v4
         with:
-          name: kernel-modules
+          name: cksu-ko-android16-6.12
           path: |
             cksu.ko
             lkmloader/lkmloader.ko
@@ -34,8 +34,9 @@ jobs:
           ndk-version: r27
       - name: Build init_wrapper
         run: |
-          NDK_CC=${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
-          $NDK_CC -static -Wl,-z,max-page-size=65536 -o init-wrapper/init_wrapper init-wrapper/wrapper.c
+          ${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang \
+            -static -Wl,-z,max-page-size=65536 \
+            -o init-wrapper/init_wrapper init-wrapper/wrapper.c
       - uses: actions/upload-artifact@v4
         with:
           name: init-wrapper
@@ -64,16 +65,11 @@ jobs:
           path: csud/target/aarch64-linux-android/release/csud
 
   build-cksu-patch:
-    needs: [build-kernel, build-wrapper]
+    needs: [build-wrapper]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Download kernel modules
-        uses: actions/download-artifact@v4
-        with:
-          name: kernel-modules
-          path: cksu-patch/assets/
       - name: Download init_wrapper
         uses: actions/download-artifact@v4
         with:
@@ -83,5 +79,5 @@ jobs:
         run: cd cksu-patch && cargo build --release
       - uses: actions/upload-artifact@v4
         with:
-          name: cksu-patch-android16-6.12
+          name: cksu-patch
           path: cksu-patch/target/release/cksu-patch

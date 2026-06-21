@@ -9,13 +9,11 @@ use std::fs;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
 
-const EMBEDDED_CKSU_KO: &[u8] = include_bytes!("../assets/cksu.ko");
-const EMBEDDED_LKMLOADER_KO: &[u8] = include_bytes!("../assets/lkmloader.ko");
 const EMBEDDED_INIT_WRAPPER: &[u8] = include_bytes!("../assets/init_wrapper");
 const KEY_PLACEHOLDER: &[u8] = b"CKSU_KEY_PLACEHOLDER_PAD_PAD_PAD_PAD";
 
 #[derive(Parser)]
-#[command(name = "cksu-patch", version, about = "Patch init_boot.img for CKSU (android16-6.12)")]
+#[command(name = "cksu-patch", version, about = "Patch init_boot.img for CKSU")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -23,16 +21,22 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
-    /// Patch init_boot.img with embedded CKSU modules
+    /// Patch init_boot.img
     Patch {
         /// Input init_boot.img
         input: PathBuf,
         /// Output patched image
         #[arg(short, long)]
         output: PathBuf,
-        /// Superkey for CKSU authentication
+        /// Superkey
         #[arg(short, long)]
         key: String,
+        /// Path to cksu.ko
+        #[arg(long)]
+        ko: PathBuf,
+        /// Path to lkmloader.ko
+        #[arg(long)]
+        loader: PathBuf,
     },
 }
 
@@ -62,7 +66,7 @@ fn inject_key(wrapper: &[u8], key: &str) -> Vec<u8> {
     patched
 }
 
-fn patch(input: &PathBuf, output: &PathBuf, key: &str) -> Result<()> {
+fn patch(input: &PathBuf, output: &PathBuf, key: &str, ko: &PathBuf, loader: &PathBuf) -> Result<()> {
     let data = fs::read(input).context("read input image")?;
     let boot = BootImage::parse(&data).context("parse boot image")?;
 
@@ -88,10 +92,12 @@ fn patch(input: &PathBuf, output: &PathBuf, key: &str) -> Result<()> {
     }
 
     let wrapper_patched = inject_key(EMBEDDED_INIT_WRAPPER, key);
+    let ko_data = fs::read(ko).context("read cksu.ko")?;
+    let loader_data = fs::read(loader).context("read lkmloader.ko")?;
 
     cpio.add("/init", make_entry(&wrapper_patched, 0o100755));
-    cpio.add("/cksu.ko", make_entry(EMBEDDED_CKSU_KO, 0o100644));
-    cpio.add("/lkmloader.ko", make_entry(EMBEDDED_LKMLOADER_KO, 0o100644));
+    cpio.add("/cksu.ko", make_entry(&ko_data, 0o100644));
+    cpio.add("/lkmloader.ko", make_entry(&loader_data, 0o100644));
 
     let mut cpio_out = Vec::new();
     cpio.dump(&mut cpio_out)?;
@@ -102,13 +108,15 @@ fn patch(input: &PathBuf, output: &PathBuf, key: &str) -> Result<()> {
     patcher.patch(&mut out_buf)?;
 
     fs::write(output, out_buf.into_inner())?;
-    eprintln!("patched: {} (key embedded)", output.display());
+    eprintln!("patched: {}", output.display());
     Ok(())
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Patch { input, output, key } => patch(&input, &output, &key),
+        Commands::Patch { input, output, key, ko, loader } => {
+            patch(&input, &output, &key, &ko, &loader)
+        }
     }
 }
