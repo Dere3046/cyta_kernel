@@ -50,7 +50,7 @@ static int __init cksu_init(void)
 		return ret;
 	}
 
-	ret = cksu_supercall_init();
+	ret = cksu_supercall_init(superkey);
 	if (ret)
 		pr_warn("[cksu] supercall failed: %d\n", ret);
 

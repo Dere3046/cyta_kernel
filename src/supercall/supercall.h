@@ -2,6 +2,7 @@
 #ifndef CKSU_SUPERCALL_H
 #define CKSU_SUPERCALL_H
 
+// 64-bit encoding: [key_magic:32][version:16][cmd:16]
 #define CKSU_HELLO          0x0001
 #define CKSU_GET_CHALLENGE  0x1000
 #define CKSU_GRANT_ROOT     0x1001
@@ -18,7 +19,7 @@
 
 #define CKSU_VERSION        0x0200
 
-int cksu_supercall_init(void);
+int cksu_supercall_init(const char *key);
 void cksu_supercall_exit(void);
 
 #endif

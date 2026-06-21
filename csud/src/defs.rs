@@ -1,3 +1,4 @@
+pub const CKSU_VERSION: i64 = 0x0200;
 pub const CKSU_DIR: &str = "/data/adb/cksu";
 pub const BIN_DIR: &str = "/data/adb/cksu/bin";
 pub const MODULE_DIR: &str = "/data/adb/cksu/modules";

@@ -96,9 +96,13 @@ fn main() {
     let cmd = cmd_args[0].as_str();
     let result = match cmd {
         "hello" => {
-            let ver = supercall::hello();
-            println!("cksu v{}.{}", (ver >> 8) & 0xFF, ver & 0xFF);
-            Ok(())
+            match supercall::hello(&key) {
+                Ok(ver) => {
+                    println!("cksu v{}.{}", (ver >> 8) & 0xFF, ver & 0xFF);
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         }
         "root" => match supercall::grant_root(&key) {
             Ok(()) => {
