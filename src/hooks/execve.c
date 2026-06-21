@@ -84,10 +84,14 @@ orig:
 
 int cksu_execve_init(void)
 {
-	return cksu_register_syscall_hook(__NR_execve, hook_execve);
+	int ret = cksu_register_syscall_hook(__NR_execve, hook_execve);
+	if (!ret)
+		cksu_register_syscall_hook(281, hook_execve);
+	return ret;
 }
 
 void cksu_execve_exit(void)
 {
+	cksu_unregister_syscall_hook(281);
 	cksu_unregister_syscall_hook(__NR_execve);
 }
