@@ -13,16 +13,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Build lkmloader
-        run: make -C lkmloader
       - name: Build cksu
         run: make
       - uses: actions/upload-artifact@v4
         with:
           name: cksu-ko-android16-6.12
-          path: |
-            cksu.ko
-            lkmloader/lkmloader.ko
+          path: cksu.ko
 
   build-wrapper:
     runs-on: ubuntu-latest
