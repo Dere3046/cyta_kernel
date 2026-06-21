@@ -79,7 +79,7 @@ fn main() {
         .enumerate()
         .filter(|(i, a)| {
             *i != 0
-                && (key_idx == usize::MAX || (*i != key_idx + 1 && *i != key_idx + 2))
+                && (key_idx == usize::MAX || *i != key_idx + 1)
                 && a.as_str() != "-k"
         })
         .map(|(_, a)| a.clone())
