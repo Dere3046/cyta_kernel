@@ -5,16 +5,38 @@ mod supercall;
 use std::env;
 use std::path::Path;
 
-fn get_key(args: &[String]) -> Option<(String, usize)> {
+fn resolve_key(args: &[String]) -> (Option<String>, Vec<String>) {
+    let mut key = None;
+    let mut filtered = Vec::new();
+    let mut skip_next = false;
+
     for (i, arg) in args.iter().enumerate() {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
         if arg == "-k" && i + 1 < args.len() {
-            return Some((args[i + 1].clone(), i));
+            key = Some(args[i + 1].clone());
+            skip_next = true;
+            continue;
+        }
+        filtered.push(arg.clone());
+    }
+
+    if key.is_none() {
+        key = env::var("CKSU_KEY").ok();
+    }
+
+    if key.is_none() {
+        if let Ok(content) = std::fs::read_to_string(defs::SUPERKEY_PATH) {
+            let k = content.trim().to_string();
+            if !k.is_empty() {
+                key = Some(k);
+            }
         }
     }
-    if let Ok(k) = env::var("CKSU_KEY") {
-        return Some((k, usize::MAX));
-    }
-    None
+
+    (key, filtered)
 }
 
 fn usage() {
@@ -25,6 +47,7 @@ fn usage() {
     eprintln!("  hello             check module loaded");
     eprintln!("  allow <uid>       add uid to allowlist");
     eprintln!("  deny <uid>        remove uid");
+    eprintln!("  list              show allowlist");
     eprintln!("  post-fs-data      boot stage");
     eprintln!("  services          boot stage");
     eprintln!("  boot-completed    boot stage");
@@ -40,50 +63,27 @@ fn main() {
         .and_then(|n| n.to_str())
         .unwrap_or("csud");
 
-    // Multi-call: argv[0] == "su"
     if exe_name == "su" {
-        let (key, _) = match get_key(&args[1..]) {
-            Some((k, idx)) => (k, idx),
-            None => {
-                if let Ok(k) = env::var("CKSU_KEY") {
-                    (k, usize::MAX)
-                } else {
-                    eprintln!("su: set CKSU_KEY or use -k <key>");
-                    std::process::exit(1);
-                }
-            }
-        };
-        let su_args: Vec<String> = args[1..]
-            .iter()
-            .filter(|a| *a != "-k")
-            .cloned()
-            .collect();
-        if let Err(e) = su::main(&key, &su_args) {
+        let (key, remaining) = resolve_key(&args[1..]);
+        let key = key.unwrap_or_else(|| {
+            eprintln!("su: no key (use -k, CKSU_KEY, or {}))", defs::SUPERKEY_PATH);
+            std::process::exit(1);
+        });
+        if let Err(e) = su::main(&key, &remaining) {
             eprintln!("su: {e}");
             std::process::exit(1);
         }
         return;
     }
 
-    // Normal csud mode
-    let (key, key_idx) = match get_key(&args) {
-        Some(v) => v,
+    let (key, cmd_args) = resolve_key(&args[1..]);
+    let key = match key {
+        Some(k) => k,
         None => {
             usage();
             std::process::exit(1);
         }
     };
-
-    let cmd_args: Vec<String> = args
-        .iter()
-        .enumerate()
-        .filter(|(i, a)| {
-            *i != 0
-                && (key_idx == usize::MAX || *i != key_idx + 1)
-                && a.as_str() != "-k"
-        })
-        .map(|(_, a)| a.clone())
-        .collect();
 
     if cmd_args.is_empty() {
         usage();
@@ -100,9 +100,7 @@ fn main() {
         "root" => {
             match supercall::grant_root(&key) {
                 Ok(()) => {
-                    println!("uid={} gid={}", unsafe { libc::getuid() }, unsafe {
-                        libc::getgid()
-                    });
+                    println!("uid={} gid={}", unsafe { libc::getuid() }, unsafe { libc::getgid() });
                     su::main(&key, &[])
                 }
                 Err(e) => Err(e),

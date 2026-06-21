@@ -4,6 +4,7 @@ pub const MODULE_DIR: &str = "/data/adb/cksu/modules";
 pub const MODULE_UPDATE_DIR: &str = "/data/adb/cksu/modules_update";
 pub const BUSYBOX_PATH: &str = "/data/adb/cksu/bin/busybox";
 pub const CSUD_PATH: &str = "/data/adb/cksu/bin/csud";
+pub const SUPERKEY_PATH: &str = "/data/adb/cksu/.superkey";
 
 pub const CKSU_NR: i64 = 45; // __NR_truncate
 pub const CKSU_HELLO: i64 = 0x0001;
