@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Su mode patterns derived from KernelSU (GPL-2.0)
+
 use crate::supercall;
+use crate::utils;
 use std::env;
 use std::ffi::CString;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::process::CommandExt;
+use std::process::Command;
 
 fn set_selinux_context(ctx: &str) {
     let _ = std::fs::write("/proc/thread-self/attr/current", ctx);
@@ -15,10 +20,12 @@ pub fn main(key: &str, args: &[String]) -> anyhow::Result<()> {
     }
 
     set_selinux_context("u:r:magisk:s0");
+    utils::switch_cgroups();
 
     let mut shell = "/system/bin/sh".to_string();
     let mut command: Option<String> = None;
     let mut login = false;
+    let mut mount_master = false;
     let mut i = 0;
 
     while i < args.len() {
@@ -36,42 +43,56 @@ pub fn main(key: &str, args: &[String]) -> anyhow::Result<()> {
                 }
             }
             "-l" | "--login" => login = true,
+            "-M" | "--mount-master" => mount_master = true,
             _ => {}
         }
         i += 1;
     }
 
-    if let Some(cmd) = command {
-        let c_shell = CString::new(shell.as_bytes())?;
-        let c_arg0 = if login {
-            CString::new(format!("-{}", shell.rsplit('/').next().unwrap_or("sh")))?
-        } else {
-            CString::new(shell.rsplit('/').next().unwrap_or("sh").as_bytes())?
-        };
-        let c_flag = CString::new("-c")?;
-        let c_cmd = CString::new(cmd.as_bytes())?;
-
-        let argv = [c_arg0.as_ptr(), c_flag.as_ptr(), c_cmd.as_ptr(), std::ptr::null()];
-        unsafe {
-            libc::execv(c_shell.as_ptr(), argv.as_ptr());
-        }
-    } else {
-        let c_shell = CString::new(shell.as_bytes())?;
-        let c_arg0 = if login {
-            CString::new(format!("-{}", shell.rsplit('/').next().unwrap_or("sh")))?
-        } else {
-            CString::new(shell.rsplit('/').next().unwrap_or("sh").as_bytes())?
-        };
-
-        let argv = [c_arg0.as_ptr(), std::ptr::null()];
-
-        env::set_var("PATH", "/sbin:/system/bin:/system/xbin:/data/adb/cksu/bin");
-        env::set_var("HOME", "/data");
-
-        unsafe {
-            libc::execv(c_shell.as_ptr(), argv.as_ptr());
-        }
+    if mount_master {
+        let _ = switch_mnt_ns(1);
     }
 
-    anyhow::bail!("execv failed");
+    let shell_name = shell.rsplit('/').next().unwrap_or("sh");
+    let arg0 = if login {
+        format!("-{shell_name}")
+    } else {
+        shell_name.to_string()
+    };
+
+    let mut cmd = Command::new(&shell);
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::setpgid(0, 0);
+            Ok(())
+        });
+    }
+    cmd.arg0(&arg0);
+
+    if let Some(c) = command {
+        cmd.args(["-c", &c]);
+    }
+
+    cmd.env("PATH", "/sbin:/system/bin:/system/xbin:/data/adb/cksu/bin");
+    cmd.env("HOME", "/data");
+    cmd.env("SHELL", &shell);
+    cmd.env("USER", "root");
+    cmd.env("LOGNAME", "root");
+
+    let err = cmd.exec();
+    anyhow::bail!("exec failed: {err}");
+}
+
+fn switch_mnt_ns(pid: i32) -> anyhow::Result<()> {
+    let ns_path = format!("/proc/{pid}/ns/mnt");
+    let fd = unsafe { libc::open(CString::new(ns_path)?.as_ptr(), libc::O_RDONLY) };
+    if fd < 0 {
+        anyhow::bail!("open mnt ns failed");
+    }
+    let ret = unsafe { libc::syscall(libc::SYS_setns, fd, libc::CLONE_NEWNS) };
+    unsafe { libc::close(fd) };
+    if ret < 0 {
+        anyhow::bail!("setns failed");
+    }
+    Ok(())
 }

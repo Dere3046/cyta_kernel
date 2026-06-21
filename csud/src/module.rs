@@ -207,10 +207,15 @@ pub fn prune_modules() -> Result<()> {
             continue;
         }
         if path.join("remove").exists() {
-            fs::remove_dir_all(&path)?;
+            let uninstall_sh = path.join("uninstall.sh");
+            if uninstall_sh.exists() {
+                let module_id = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let _ = utils::exec_script(&uninstall_sh, true, Some(module_id));
+            }
+            let _ = fs::remove_dir_all(&path);
             let update_path = Path::new(defs::MODULE_UPDATE_DIR).join(entry.file_name());
             if update_path.exists() {
-                fs::remove_dir_all(&update_path)?;
+                let _ = fs::remove_dir_all(&update_path);
             }
         }
     }
@@ -232,19 +237,29 @@ pub fn handle_updated_modules() -> Result<()> {
         let id = entry.file_name();
         let dst = Path::new(defs::MODULE_DIR).join(&id);
 
+        let was_disabled = dst.join("disable").exists();
+        let was_removed = dst.join("remove").exists();
+
         if dst.exists() {
-            fs::remove_dir_all(&dst)?;
+            let _ = fs::remove_dir_all(&dst);
         }
         fs::rename(&src, &dst)?;
 
+        if was_disabled {
+            let _ = utils::ensure_file_exists(&dst.join("disable"));
+        }
+        if was_removed {
+            let _ = utils::ensure_file_exists(&dst.join("remove"));
+        }
+
         let update_marker = dst.join("update");
         if update_marker.exists() {
-            fs::remove_file(&update_marker)?;
+            let _ = fs::remove_file(&update_marker);
         }
     }
 
     if update_dir.exists() {
-        fs::remove_dir_all(update_dir)?;
+        let _ = fs::remove_dir_all(update_dir);
     }
     Ok(())
 }
