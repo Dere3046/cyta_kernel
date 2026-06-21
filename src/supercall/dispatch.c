@@ -10,6 +10,7 @@
 #include <linux/printk.h>
 #include <linux/cred.h>
 #include <linux/uidgid.h>
+#include <linux/uaccess.h>
 #include "supercall.h"
 #include "dispatch.h"
 #include "auth.h"
@@ -107,6 +108,23 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 			return -EPERM;
 
 		return 0;
+
+	case CKSU_ADD_VIRT_TYPE: {
+		struct { char type_name[64]; char context[128]; } __user *udata =
+			(void __user *)a1;
+		struct { char type_name[64]; char context[128]; } kdata;
+
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+
+		if (copy_from_user(&kdata, udata, sizeof(kdata)))
+			return -EFAULT;
+		kdata.type_name[63] = '\0';
+		kdata.context[127] = '\0';
+		return cksu_virt_add_type(kdata.type_name, kdata.context);
+	}
 	}
 
 	return -ENOTTY;

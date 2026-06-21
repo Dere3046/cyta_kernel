@@ -10,6 +10,9 @@
 #include <linux/rcupdate.h>
 #include <linux/uaccess.h>
 #include <linux/spinlock.h>
+#include <linux/atomic.h>
+#include <linux/string.h>
+#include <linux/errno.h>
 #include "virt_selinux.h"
 
 struct virt_rule {
@@ -39,17 +42,57 @@ static DEFINE_HASHTABLE(permissive_table, 6);
 static DEFINE_HASHTABLE(domain_table, 8);
 static DEFINE_SPINLOCK(virt_lock);
 
+#define MAX_VIRT_TYPES 64
+
+struct virt_type_entry {
+	u32 hash;
+	u32 sid;
+	char context[128];
+	struct hlist_node node;
+	struct rcu_head rcu;
+};
+
+static DEFINE_HASHTABLE(virt_type_table, 6);
+static atomic_t next_virt_sid = ATOMIC_INIT(VIRTUAL_SID_BASE);
+
+struct virt_proc_sid {
+	pid_t pid;
+	u32 virt_sid;
+	struct hlist_node node;
+	struct rcu_head rcu;
+};
+
+static DEFINE_HASHTABLE(virt_proc_table, 8);
+
 int cksu_virt_selinux_init(void)
 {
 	hash_init(rule_table);
 	hash_init(permissive_table);
 	hash_init(domain_table);
+	hash_init(virt_type_table);
+	hash_init(virt_proc_table);
 	return 0;
 }
 
 void cksu_virt_selinux_exit(void)
 {
+	struct virt_type_entry *t;
+	struct virt_proc_sid *ps;
+	struct hlist_node *tmp;
+	int bkt;
+
 	cksu_virt_clear_all();
+
+	spin_lock(&virt_lock);
+	hash_for_each_safe(virt_type_table, bkt, tmp, t, node) {
+		hash_del_rcu(&t->node);
+		kfree_rcu(t, rcu);
+	}
+	hash_for_each_safe(virt_proc_table, bkt, tmp, ps, node) {
+		hash_del_rcu(&ps->node);
+		kfree_rcu(ps, rcu);
+	}
+	spin_unlock(&virt_lock);
 }
 
 bool cksu_virt_check(u32 ssid, u32 tsid, u16 tclass, u32 requested)
@@ -210,5 +253,128 @@ int cksu_virt_load_rules(const struct cksu_sepolicy_cmd __user *cmds, int count)
 			break;
 		}
 	}
+	return 0;
+}
+
+int cksu_virt_add_type(const char *type_name, const char *context)
+{
+	struct virt_type_entry *e;
+	u32 hash = 0;
+	const char *p;
+
+	for (p = type_name; *p; p++)
+		hash = hash * 31 + *p;
+
+	if (cksu_virt_type_exists(hash))
+		return 0;
+
+	if ((u32)atomic_read(&next_virt_sid) - VIRTUAL_SID_BASE >= MAX_VIRT_TYPES)
+		return -ENOSPC;
+
+	e = kmalloc(sizeof(*e), GFP_KERNEL);
+	if (!e)
+		return -ENOMEM;
+
+	e->hash = hash;
+	e->sid = (u32)atomic_inc_return(&next_virt_sid) - 1;
+	strscpy(e->context, context, sizeof(e->context));
+
+	spin_lock(&virt_lock);
+	hash_add_rcu(virt_type_table, &e->node, hash);
+	spin_unlock(&virt_lock);
+	return 0;
+}
+
+bool cksu_virt_type_exists(u32 type_hash)
+{
+	struct virt_type_entry *e;
+
+	rcu_read_lock();
+	hash_for_each_possible_rcu(virt_type_table, e, node, type_hash) {
+		if (e->hash == type_hash) {
+			rcu_read_unlock();
+			return true;
+		}
+	}
+	rcu_read_unlock();
+	return false;
+}
+
+u32 cksu_virt_type_to_sid(u32 type_hash)
+{
+	struct virt_type_entry *e;
+
+	rcu_read_lock();
+	hash_for_each_possible_rcu(virt_type_table, e, node, type_hash) {
+		if (e->hash == type_hash) {
+			u32 sid = e->sid;
+			rcu_read_unlock();
+			return sid;
+		}
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+const char *cksu_virt_sid_to_context(u32 sid)
+{
+	struct virt_type_entry *e;
+	int bkt;
+
+	rcu_read_lock();
+	hash_for_each_rcu(virt_type_table, bkt, e, node) {
+		if (e->sid == sid) {
+			rcu_read_unlock();
+			return e->context;
+		}
+	}
+	rcu_read_unlock();
+	return NULL;
+}
+
+bool cksu_is_virtual_sid(u32 sid)
+{
+	return sid >= VIRTUAL_SID_BASE;
+}
+
+void cksu_virt_set_proc_sid(pid_t pid, u32 sid)
+{
+	struct virt_proc_sid *ps;
+
+	spin_lock(&virt_lock);
+	hash_for_each_possible(virt_proc_table, ps, node, pid) {
+		if (ps->pid == pid) {
+			ps->virt_sid = sid;
+			spin_unlock(&virt_lock);
+			return;
+		}
+	}
+	spin_unlock(&virt_lock);
+
+	ps = kmalloc(sizeof(*ps), GFP_KERNEL);
+	if (!ps)
+		return;
+
+	ps->pid = pid;
+	ps->virt_sid = sid;
+
+	spin_lock(&virt_lock);
+	hash_add_rcu(virt_proc_table, &ps->node, pid);
+	spin_unlock(&virt_lock);
+}
+
+u32 cksu_virt_get_proc_sid(pid_t pid)
+{
+	struct virt_proc_sid *ps;
+
+	rcu_read_lock();
+	hash_for_each_possible_rcu(virt_proc_table, ps, node, pid) {
+		if (ps->pid == pid) {
+			u32 sid = ps->virt_sid;
+			rcu_read_unlock();
+			return sid;
+		}
+	}
+	rcu_read_unlock();
 	return 0;
 }

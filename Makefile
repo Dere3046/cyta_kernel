@@ -6,6 +6,7 @@ $(MODULE_NAME)-objs := \
 	src/hooks/syscall_hook.o \
 	src/hooks/kprobe.o \
 	src/hooks/selinux.o \
+	src/hooks/selinux_context.o \
 	src/hooks/audit.o \
 	src/hooks/elevate.o \
 	src/hooks/execve.o \
@@ -16,6 +17,7 @@ $(MODULE_NAME)-objs := \
 	src/policy/allowlist.o \
 	src/policy/context.o \
 	src/policy/virt_selinux.o \
+	src/policy/shadow_policy.o \
 	src/boot/rc_inject.o \
 	src/main.o
 obj-m := $(MODULE_NAME).o

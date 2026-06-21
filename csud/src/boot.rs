@@ -6,6 +6,7 @@ use std::path::Path;
 
 use crate::defs;
 use crate::module;
+use crate::sepolicy;
 use crate::utils;
 
 pub fn on_post_fs_data(key: &str) -> Result<()> {
@@ -24,6 +25,10 @@ pub fn on_post_fs_data(key: &str) -> Result<()> {
 
     module::handle_updated_modules()?;
     module::prune_modules()?;
+
+    if let Err(e) = sepolicy::load_all_module_sepolicy(key) {
+        eprintln!("csud: sepolicy loading failed: {e}");
+    }
 
     exec_common_scripts("post-fs-data.d", true);
     exec_module_scripts("post-fs-data", true);

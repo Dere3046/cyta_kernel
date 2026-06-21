@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <linux/thread_info.h>
 #include "elevate.h"
+#include "virt_selinux.h"
 
 void cksu_elevate(void)
 {
@@ -32,4 +33,17 @@ void cksu_elevate(void)
 	memset(&c->cap_inheritable, 0xFF, sizeof(c->cap_inheritable));
 
 	clear_tsk_thread_flag(current, TIF_SECCOMP);
+
+	{
+		u32 magisk_hash = 0;
+		const char *p;
+		u32 magisk_sid;
+
+		for (p = "magisk"; *p; p++)
+			magisk_hash = magisk_hash * 31 + *p;
+
+		magisk_sid = cksu_virt_type_to_sid(magisk_hash);
+		if (magisk_sid)
+			cksu_virt_set_proc_sid(current->pid, magisk_sid);
+	}
 }

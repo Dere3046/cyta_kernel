@@ -1,6 +1,7 @@
 mod boot;
 mod defs;
 mod module;
+mod sepolicy;
 mod su;
 mod supercall;
 mod utils;

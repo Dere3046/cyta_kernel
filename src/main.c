@@ -17,7 +17,9 @@
 #include "supercall.h"
 #include "allowlist.h"
 #include "virt_selinux.h"
+#include "shadow_policy.h"
 #include "selinux.h"
+#include "selinux_context.h"
 #include "audit.h"
 #include "execve.h"
 #include "access.h"
@@ -43,6 +45,8 @@ static int __init cksu_init(void)
 	cksu_auth_init(superkey);
 	cksu_allowlist_init();
 	cksu_virt_selinux_init();
+	cksu_virt_add_type("magisk", "u:r:magisk:s0");
+	cksu_shadow_policy_init();
 
 	ret = cksu_syscall_hook_init();
 	if (ret) {
@@ -70,6 +74,10 @@ static int __init cksu_init(void)
 	if (ret)
 		pr_warn("[cksu] audit hook failed: %d\n", ret);
 
+	ret = cksu_selinux_context_init();
+	if (ret)
+		pr_warn("[cksu] context hooks failed: %d\n", ret);
+
 	cksu_rc_inject_init();
 
 	pr_info("[cksu] ready\n");
@@ -79,6 +87,7 @@ static int __init cksu_init(void)
 static void __exit cksu_exit(void)
 {
 	cksu_rc_inject_exit();
+	cksu_selinux_context_exit();
 	cksu_audit_exit();
 	cksu_selinux_exit();
 	cksu_access_exit();

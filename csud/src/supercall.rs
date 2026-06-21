@@ -90,3 +90,58 @@ pub fn get_list(key: &str) -> anyhow::Result<Vec<u32>> {
     }
     Ok(buf[..ret as usize].to_vec())
 }
+
+pub fn add_virt_type(key: &str, type_name: &str, context: &str) -> anyhow::Result<()> {
+    #[repr(C)]
+    struct VirtTypeData {
+        type_name: [u8; 64],
+        context: [u8; 128],
+    }
+
+    let mut data = VirtTypeData {
+        type_name: [0u8; 64],
+        context: [0u8; 128],
+    };
+
+    let name_bytes = type_name.as_bytes();
+    let ctx_bytes = context.as_bytes();
+    let name_len = name_bytes.len().min(63);
+    let ctx_len = ctx_bytes.len().min(127);
+    data.type_name[..name_len].copy_from_slice(&name_bytes[..name_len]);
+    data.context[..ctx_len].copy_from_slice(&ctx_bytes[..ctx_len]);
+
+    let ret = auth_call(key, CKSU_ADD_VIRT_TYPE, &data as *const _ as i64, 0)?;
+    if ret != 0 {
+        anyhow::bail!("add_virt_type failed: {ret}");
+    }
+    Ok(())
+}
+
+pub fn load_sepolicy_rule(key: &str, action: u8, source: u32, target: u32, tclass: u16, perms: u32) -> anyhow::Result<()> {
+    #[repr(C)]
+    struct SepolicyCmd {
+        action: u8,
+        _pad: [u8; 3],
+        source: u32,
+        target: u32,
+        tclass: u16,
+        _pad2: u16,
+        perms: u32,
+    }
+
+    let cmd = SepolicyCmd {
+        action,
+        _pad: [0; 3],
+        source,
+        target,
+        tclass,
+        _pad2: 0,
+        perms,
+    };
+
+    let ret = auth_call(key, CKSU_LOAD_SEPOLICY, &cmd as *const _ as i64, 1)?;
+    if ret != 0 {
+        anyhow::bail!("load_sepolicy_rule failed: {ret}");
+    }
+    Ok(())
+}

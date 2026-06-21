@@ -18,6 +18,10 @@ pub const CKSU_LOAD_SEPOLICY: i64 = 0x1010;
 pub const CKSU_CLEAR_SEPOLICY: i64 = 0x1011;
 pub const CKSU_SET_VIRT_DOMAIN: i64 = 0x1012;
 pub const CKSU_REPORT_EVENT: i64 = 0x1020;
+pub const CKSU_ADD_VIRT_TYPE: i64 = 0x1013;
+
+pub const SEPOLICY_ALLOW: u8 = 1;
+pub const SEPOLICY_PERMISSIVE: u8 = 2;
 
 pub const HASH_LEN: usize = 32;
 pub const NONCE_LEN: usize = 32;
