@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Su mode patterns derived from KernelSU (GPL-2.0)
 
 use crate::supercall;
 use crate::utils;

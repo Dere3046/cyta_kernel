@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Derived from KernelSU (GPL-2.0)
 #ifndef CKSU_PATCH_MEMORY_H
 #define CKSU_PATCH_MEMORY_H
 

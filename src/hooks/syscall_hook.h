@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Derived from KernelSU (GPL-2.0)
 #ifndef CKSU_SYSCALL_HOOK_H
 #define CKSU_SYSCALL_HOOK_H
 

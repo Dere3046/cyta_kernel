@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Process management patterns derived from KernelSU (GPL-2.0)
 
 use anyhow::{Context, Result};
 use std::fs;

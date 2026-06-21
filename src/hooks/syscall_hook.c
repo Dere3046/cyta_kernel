@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Derived from KernelSU (GPL-2.0)
 /*
- * syscall_hook.c — tracepoint-based syscall dispatcher (KSU approach)
+ * syscall_hook.c — tracepoint-based syscall dispatcher
  *
  * Bypasses KCFI by using sys_enter tracepoint to redirect syscallno
  * BEFORE the kernel's CFI-checked indirect call through sys_call_table.

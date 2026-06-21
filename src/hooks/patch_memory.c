@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Derived from KernelSU (GPL-2.0)
 /*
  * patch_memory.c — fixmap-based kernel memory patching for ARM64
  */

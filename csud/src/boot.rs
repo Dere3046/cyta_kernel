@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Boot lifecycle patterns derived from KernelSU (GPL-2.0)
 
 use anyhow::Result;
 use std::fs;

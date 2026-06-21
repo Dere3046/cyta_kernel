@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Derived from KernelSU (GPL-2.0)
 /*
  * rc_inject.c — init.rc injection via read hook + f_op proxy
  *
- * Copyright (C) 2023 tiann (KernelSU)
  * Copyright (C) 2026 dere3046
  */
 
