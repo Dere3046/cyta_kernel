@@ -24,12 +24,29 @@ jobs:
             cksu.ko
             lkmloader/lkmloader.ko
 
+  build-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27
+      - name: Build init_wrapper
+        run: |
+          NDK_CC=${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          $NDK_CC -static -Wl,-z,max-page-size=65536 -o init-wrapper/init_wrapper init-wrapper/wrapper.c
+      - uses: actions/upload-artifact@v4
+        with:
+          name: init-wrapper
+          path: init-wrapper/init_wrapper
+
   build-csud:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: nttld/setup-ndk@v1
-        id: setup-ndk
+        id: ndk
         with:
           ndk-version: r27
       - uses: dtolnay/rust-toolchain@stable
@@ -38,6 +55,8 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
       - name: Build csud
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: cd csud && cargo ndk -t arm64-v8a build --release
       - uses: actions/upload-artifact@v4
         with:
@@ -45,13 +64,24 @@ jobs:
           path: csud/target/aarch64-linux-android/release/csud
 
   build-cksu-patch:
+    needs: [build-kernel, build-wrapper]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Download kernel modules
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-modules
+          path: cksu-patch/assets/
+      - name: Download init_wrapper
+        uses: actions/download-artifact@v4
+        with:
+          name: init-wrapper
+          path: cksu-patch/assets/
       - name: Build cksu-patch
         run: cd cksu-patch && cargo build --release
       - uses: actions/upload-artifact@v4
         with:
-          name: cksu-patch
+          name: cksu-patch-android16-6.12
           path: cksu-patch/target/release/cksu-patch

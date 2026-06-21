@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-only
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use myboot::compress::{get_decoder, is_compressed, parse_compress_format};
 use myboot::cpio::{Cpio, CpioEntry};
 use myboot::parser::BootImage;
 use myboot::patcher::BootImagePatchOption;
 use std::fs;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::path::PathBuf;
 
+const EMBEDDED_CKSU_KO: &[u8] = include_bytes!("../assets/cksu.ko");
+const EMBEDDED_LKMLOADER_KO: &[u8] = include_bytes!("../assets/lkmloader.ko");
+const EMBEDDED_INIT_WRAPPER: &[u8] = include_bytes!("../assets/init_wrapper");
+const KEY_PLACEHOLDER: &[u8] = b"CKSU_KEY_PLACEHOLDER_PAD_PAD_PAD_PAD";
+
 #[derive(Parser)]
-#[command(name = "cksu-patch", about = "Patch init_boot.img for CKSU")]
+#[command(name = "cksu-patch", version, about = "Patch init_boot.img for CKSU (android16-6.12)")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -18,16 +23,16 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
+    /// Patch init_boot.img with embedded CKSU modules
     Patch {
+        /// Input init_boot.img
         input: PathBuf,
+        /// Output patched image
         #[arg(short, long)]
         output: PathBuf,
-        #[arg(long)]
-        ko: PathBuf,
-        #[arg(long)]
-        loader: PathBuf,
-        #[arg(long)]
-        wrapper: PathBuf,
+        /// Superkey for CKSU authentication
+        #[arg(short, long)]
+        key: String,
     },
 }
 
@@ -43,9 +48,23 @@ fn make_entry(data: &[u8], mode: u32) -> CpioEntry {
     }
 }
 
-fn patch(input: &PathBuf, output: &PathBuf, ko: &PathBuf, loader: &PathBuf, wrapper: &PathBuf) -> Result<()> {
-    let data = fs::read(input)?;
-    let boot = BootImage::parse(&data)?;
+fn inject_key(wrapper: &[u8], key: &str) -> Vec<u8> {
+    let mut patched = wrapper.to_vec();
+    if let Some(pos) = patched.windows(KEY_PLACEHOLDER.len())
+        .position(|w| w == KEY_PLACEHOLDER)
+    {
+        let replacement = format!("superkey={}", key);
+        let mut buf = vec![0u8; KEY_PLACEHOLDER.len()];
+        let copy_len = replacement.len().min(buf.len());
+        buf[..copy_len].copy_from_slice(&replacement.as_bytes()[..copy_len]);
+        patched[pos..pos + KEY_PLACEHOLDER.len()].copy_from_slice(&buf);
+    }
+    patched
+}
+
+fn patch(input: &PathBuf, output: &PathBuf, key: &str) -> Result<()> {
+    let data = fs::read(input).context("read input image")?;
+    let boot = BootImage::parse(&data).context("parse boot image")?;
 
     let ramdisk_block = boot.blocks.ramdisk
         .as_ref()
@@ -56,25 +75,23 @@ fn patch(input: &PathBuf, output: &PathBuf, ko: &PathBuf, loader: &PathBuf, wrap
     let ramdisk_data = if is_compressed(fmt) {
         let mut decoder = get_decoder(fmt, ramdisk_raw)?;
         let mut buf = Vec::new();
-        std::io::Read::read_to_end(&mut decoder, &mut buf)?;
+        decoder.read_to_end(&mut buf)?;
         buf
     } else {
         ramdisk_raw.to_vec()
     };
 
-    let mut cpio = Cpio::load_from_data(&ramdisk_data)?;
+    let mut cpio = Cpio::load_from_data(&ramdisk_data).context("parse cpio")?;
 
     if cpio.exists("/init") {
         cpio.mv("/init", "/init.real")?;
     }
 
-    let wrapper_data = fs::read(wrapper)?;
-    let ko_data = fs::read(ko)?;
-    let loader_data = fs::read(loader)?;
+    let wrapper_patched = inject_key(EMBEDDED_INIT_WRAPPER, key);
 
-    cpio.add("/init", make_entry(&wrapper_data, 0o100755));
-    cpio.add("/cksu.ko", make_entry(&ko_data, 0o100644));
-    cpio.add("/lkmloader.ko", make_entry(&loader_data, 0o100644));
+    cpio.add("/init", make_entry(&wrapper_patched, 0o100755));
+    cpio.add("/cksu.ko", make_entry(EMBEDDED_CKSU_KO, 0o100644));
+    cpio.add("/lkmloader.ko", make_entry(EMBEDDED_LKMLOADER_KO, 0o100644));
 
     let mut cpio_out = Vec::new();
     cpio.dump(&mut cpio_out)?;
@@ -85,15 +102,13 @@ fn patch(input: &PathBuf, output: &PathBuf, ko: &PathBuf, loader: &PathBuf, wrap
     patcher.patch(&mut out_buf)?;
 
     fs::write(output, out_buf.into_inner())?;
-    eprintln!("patched: {}", output.display());
+    eprintln!("patched: {} (key embedded)", output.display());
     Ok(())
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Patch { input, output, ko, loader, wrapper } => {
-            patch(&input, &output, &ko, &loader, &wrapper)
-        }
+        Commands::Patch { input, output, key } => patch(&input, &output, &key),
     }
 }
