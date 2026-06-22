@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
- * execve.c — execve hook via tracepoint dispatcher: root key + su compat
- *
- * Copyright (C) 2026 dere3046
- */
-
 #include <linux/module.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
-#include <linux/fs.h>
 #include <asm/unistd.h>
 #include "execve.h"
 #include "syscall_hook.h"
 #include "elevate.h"
 #include "allowlist.h"
+#include "cksu_sym.h"
 
 #ifndef ROOT_KEY
 #define ROOT_KEY "cksu_2026_dere3046_f8a3b7c1d9e2x4z6w0q5"
@@ -43,6 +37,7 @@ static bool is_su_path(const char __user *ufilename)
 	char kbuf[256];
 	char *base, *p;
 	long len;
+	const char *su_name = cksu_get_su_name();
 
 	len = strncpy_from_user(kbuf, ufilename, sizeof(kbuf));
 	if (len <= 0)
@@ -54,7 +49,7 @@ static bool is_su_path(const char __user *ufilename)
 			base = p + 1;
 	}
 
-	return base[0] == 's' && base[1] == 'u' && base[2] == '\0';
+	return strcmp(base, su_name) == 0;
 }
 
 static long hook_execve(int nr, const struct pt_regs *regs)
@@ -73,15 +68,20 @@ static long hook_execve(int nr, const struct pt_regs *regs)
 	if (is_su_path(filename)) {
 		uid = from_kuid(&init_user_ns, current_uid());
 		if (cksu_uid_allowed(uid)) {
-			struct file *f;
 			const char *target;
 			size_t tlen;
 
-			f = filp_open(CSUD_PATH, O_PATH, 0);
-			if (!IS_ERR(f)) {
-				filp_close(f, NULL);
-				target = CSUD_PATH;
-				tlen = sizeof(CSUD_PATH);
+			if (ksym_filp_open) {
+				struct file *f = ksym_filp_open(CSUD_PATH, O_PATH, 0);
+				if (!IS_ERR(f)) {
+					if (ksym_filp_close)
+						ksym_filp_close(f, NULL);
+					target = CSUD_PATH;
+					tlen = sizeof(CSUD_PATH);
+				} else {
+					target = SH_PATH;
+					tlen = sizeof(SH_PATH);
+				}
 			} else {
 				target = SH_PATH;
 				tlen = sizeof(SH_PATH);

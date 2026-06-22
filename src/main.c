@@ -11,6 +11,7 @@
 #include <linux/init.h>
 
 #include "ksymless.h"
+#include "cksu_sym.h"
 #include "patch_memory.h"
 #include "syscall_hook.h"
 #include "auth.h"
@@ -40,6 +41,13 @@ static int __init cksu_init(void)
 
 	find_kallsyms_base();
 	ksymless_cache_kln();
+
+	ret = cksu_sym_init();
+	if (ret) {
+		pr_err("[cksu] sym init failed: %d\n", ret);
+		return ret;
+	}
+
 	cksu_patch_memory_init();
 
 	cksu_auth_init(superkey);

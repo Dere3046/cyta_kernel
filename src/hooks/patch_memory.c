@@ -8,23 +8,10 @@
 #include <linux/version.h>
 #include <asm/fixmap.h>
 #include "patch_memory.h"
-#include "ksymless.h"
-
-static struct mm_struct *mm_ptr;
-static void (*set_fixmap_fn)(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot);
-static long (*copy_nofault_fn)(void *dst, const void *src, size_t size);
-static void (*flush_dcache_fn)(unsigned long start, unsigned long end);
+#include "cksu_sym.h"
 
 void cksu_patch_memory_init(void)
 {
-	mm_ptr = (struct mm_struct *)kallsyms_name_to_addr("init_mm");
-	set_fixmap_fn = (void *)kallsyms_name_to_addr("__set_fixmap");
-	copy_nofault_fn = (void *)kallsyms_name_to_addr("copy_to_kernel_nofault");
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
-	flush_dcache_fn = (void *)kallsyms_name_to_addr("dcache_clean_inval_poc");
-#else
-	flush_dcache_fn = (void *)kallsyms_name_to_addr("__flush_dcache_area");
-#endif
 }
 
 static unsigned long virt_to_phys_walk(unsigned long addr)
@@ -35,10 +22,10 @@ static unsigned long virt_to_phys_walk(unsigned long addr)
 	pmd_t *pmd;
 	pte_t *pte;
 
-	if (!mm_ptr)
+	if (!ksym_init_mm)
 		return 0;
 
-	pgd = pgd_offset(mm_ptr, addr);
+	pgd = pgd_offset(ksym_init_mm, addr);
 	if (pgd_none(*pgd) || pgd_bad(*pgd))
 		return 0;
 
@@ -94,16 +81,16 @@ static int __nocfi patch_text_cb(void *arg)
 			goto done;
 		}
 
-		set_fixmap_fn(FIX_TEXT_POKE0, phys & PAGE_MASK, PAGE_KERNEL);
+		ksym_set_fixmap(FIX_TEXT_POKE0, phys & PAGE_MASK, PAGE_KERNEL);
 		fixmap_va = fix_to_virt(FIX_TEXT_POKE0) + (phys & ~PAGE_MASK);
 
-		ret = (int)copy_nofault_fn((void *)fixmap_va, p->src, p->len);
+		ret = (int)ksym_copy_nofault((void *)fixmap_va, p->src, p->len);
 
-		set_fixmap_fn(FIX_TEXT_POKE0, 0, __pgprot(0));
+		ksym_set_fixmap(FIX_TEXT_POKE0, 0, __pgprot(0));
 
-		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE) && flush_dcache_fn)
-			flush_dcache_fn((unsigned long)p->dst,
-					(unsigned long)p->dst + p->len);
+		if (!ret && (p->flags & CKSU_PATCH_FLUSH_DCACHE) && ksym_flush_dcache)
+			ksym_flush_dcache((unsigned long)p->dst,
+					  (unsigned long)p->dst + p->len);
 		if (!ret && (p->flags & CKSU_PATCH_FLUSH_ICACHE)) {
 			asm volatile("ic ivau, %0" :: "r"(p->dst));
 			asm volatile("dsb ish");
@@ -130,7 +117,7 @@ int cksu_patch_text(void *dst, void *src, size_t len, int flags)
 		.cpu_count = ATOMIC_INIT(0),
 	};
 
-	if (!set_fixmap_fn || !copy_nofault_fn || !mm_ptr)
+	if (!ksym_set_fixmap || !ksym_copy_nofault || !ksym_init_mm)
 		return -ENOSYS;
 
 	return stop_machine(patch_text_cb, &info, cpu_online_mask);

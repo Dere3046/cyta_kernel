@@ -2,6 +2,7 @@
 MODULE_NAME := cksu
 $(MODULE_NAME)-objs := \
 	src/ksymless/ksymless.o \
+	src/ksymless/cksu_sym.o \
 	src/hooks/patch_memory.o \
 	src/hooks/syscall_hook.o \
 	src/hooks/kprobe.o \

@@ -10,19 +10,12 @@
 #include <linux/string.h>
 #include "shadow_policy.h"
 #include "virt_selinux.h"
-#include "ksymless.h"
-
-static int (*sid_to_context_fn)(u32 sid, char **scontext, u32 *scontext_len);
+#include "cksu_sym.h"
 
 int cksu_shadow_policy_init(void)
 {
-	sid_to_context_fn = (void *)kallsyms_name_to_addr("security_sid_to_context");
-	if (!sid_to_context_fn) {
-		pr_warn("[cksu] shadow_policy: security_sid_to_context not found\n");
-		return -ENOENT;
-	}
-	pr_info("[cksu] shadow_policy: sid_to_context=0x%lx\n",
-		(unsigned long)sid_to_context_fn);
+	if (!ksym_sid_to_context)
+		pr_warn("[cksu] shadow_policy: sid_to_context not resolved\n");
 	return 0;
 }
 
@@ -68,12 +61,12 @@ bool cksu_shadow_check(u32 ssid, u32 tsid, u16 tclass, u32 requested)
 	u32 src_hash, tgt_hash;
 	bool result = false;
 
-	if (!sid_to_context_fn)
+	if (!ksym_sid_to_context)
 		return false;
 
-	if (sid_to_context_fn(ssid, &scontext, &slen))
+	if (ksym_sid_to_context(ssid, &scontext, &slen))
 		goto out;
-	if (sid_to_context_fn(tsid, &tcontext, &tlen))
+	if (ksym_sid_to_context(tsid, &tcontext, &tlen))
 		goto out;
 
 	src_hash = extract_type_hash(scontext, slen);

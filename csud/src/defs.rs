@@ -24,6 +24,8 @@ pub const CKSU_SET_VIRT_DOMAIN: i64 = 0x1012;
 pub const CKSU_REPORT_EVENT: i64 = 0x1020;
 pub const CKSU_ADD_VIRT_TYPE: i64 = 0x1013;
 pub const CKSU_REMOVE_VIRT_TYPE: i64 = 0x1014;
+pub const CKSU_SET_SU_PATH: i64 = 0x1030;
+pub const CKSU_GET_SU_PATH: i64 = 0x1031;
 
 pub const SEPOLICY_ALLOW: u8 = 1;
 pub const SEPOLICY_PERMISSIVE: u8 = 2;

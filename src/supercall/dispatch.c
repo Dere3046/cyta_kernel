@@ -18,6 +18,7 @@
 #include "context.h"
 #include "elevate.h"
 #include "virt_selinux.h"
+#include "cksu_sym.h"
 
 long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 {
@@ -139,6 +140,16 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 		type_name[63] = '\0';
 		return cksu_virt_remove_type(type_name);
 	}
+
+	case CKSU_SET_SU_PATH:
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+		return cksu_set_su_path_user((const char __user *)a1);
+
+	case CKSU_GET_SU_PATH:
+		return cksu_get_su_path_user((char __user *)a1, (int)a2);
 	}
 
 	return -ENOTTY;

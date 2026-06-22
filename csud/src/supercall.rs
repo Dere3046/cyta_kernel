@@ -117,6 +117,25 @@ pub fn add_virt_type(key: &str, type_name: &str, context: &str) -> anyhow::Resul
     Ok(())
 }
 
+pub fn set_su_path(key: &str, path: &str) -> anyhow::Result<()> {
+    let c_path = std::ffi::CString::new(path)?;
+    let ret = auth_call(key, CKSU_SET_SU_PATH, c_path.as_ptr() as i64, 0)?;
+    if ret != 0 {
+        anyhow::bail!("set_su_path failed: {ret}");
+    }
+    Ok(())
+}
+
+pub fn get_su_path(key: &str) -> anyhow::Result<String> {
+    let mut buf = [0u8; 64];
+    let ret = auth_call(key, CKSU_GET_SU_PATH, buf.as_mut_ptr() as i64, buf.len() as i64)?;
+    if ret < 0 {
+        anyhow::bail!("get_su_path failed: {ret}");
+    }
+    let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    Ok(String::from_utf8_lossy(&buf[..len]).to_string())
+}
+
 pub fn load_sepolicy_rule(key: &str, action: u8, source: u32, target: u32, tclass: u16, perms: u32) -> anyhow::Result<()> {
     #[repr(C)]
     struct SepolicyCmd {

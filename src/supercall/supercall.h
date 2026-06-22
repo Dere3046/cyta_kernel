@@ -16,8 +16,10 @@
 #define CKSU_ADD_VIRT_TYPE     0x1013
 #define CKSU_REMOVE_VIRT_TYPE  0x1014
 #define CKSU_REPORT_EVENT      0x1020
+#define CKSU_SET_SU_PATH       0x1030
+#define CKSU_GET_SU_PATH       0x1031
 
-#define CKSU_CMD_MAX        CKSU_REPORT_EVENT
+#define CKSU_CMD_MAX        CKSU_GET_SU_PATH
 
 #define CKSU_VERSION        0x0200
 

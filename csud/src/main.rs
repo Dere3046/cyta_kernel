@@ -137,6 +137,18 @@ fn main() {
         "post-fs-data" | "--post-fs-data" => boot::on_post_fs_data(&key),
         "services" | "--services" => boot::on_services(&key),
         "boot-completed" | "--boot-completed" => boot::on_boot_completed(&key),
+        "set-su-path" => {
+            let path = cmd_args.get(1).map(|s| s.as_str()).unwrap_or("");
+            if path.is_empty() {
+                eprintln!("usage: csud set-su-path <path>");
+                std::process::exit(1);
+            }
+            supercall::set_su_path(&key, path).map(|_| println!("su path: {path}"))
+        }
+        "get-su-path" => match supercall::get_su_path(&key) {
+            Ok(p) => { println!("{p}"); Ok(()) }
+            Err(e) => Err(e),
+        },
         "module" => {
             let sub = cmd_args.get(1).map(|s| s.as_str()).unwrap_or("");
             match sub {

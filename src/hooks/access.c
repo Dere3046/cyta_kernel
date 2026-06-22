@@ -15,27 +15,21 @@
 #include "access.h"
 #include "syscall_hook.h"
 #include "allowlist.h"
+#include "cksu_sym.h"
 
-#define SU_PATH "/system/bin/su"
-#define SU_PATH_LEN 15
 #define SH_PATH "/system/bin/sh"
 
 static bool is_su_access(const char __user *upath)
 {
-	char first;
-	char kbuf[SU_PATH_LEN + 2];
+	char kbuf[CKSU_SU_PATH_MAX];
 	long len;
-
-	if (get_user(first, upath))
-		return false;
-	if (first != '/')
-		return false;
+	const char *su_path = cksu_get_su_path();
 
 	len = strncpy_from_user(kbuf, upath, sizeof(kbuf));
-	if (len != SU_PATH_LEN)
+	if (len <= 0)
 		return false;
 
-	return memcmp(kbuf, SU_PATH, SU_PATH_LEN) == 0;
+	return strcmp(kbuf, su_path) == 0;
 }
 
 static long hook_faccessat(int nr, const struct pt_regs *regs)
