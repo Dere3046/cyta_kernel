@@ -17,11 +17,6 @@ pub fn on_post_fs_data(key: &str) -> Result<()> {
     utils::ensure_dir_exists(defs::MODULE_DIR)?;
     utils::ensure_dir_exists(defs::MODULE_UPDATE_DIR)?;
 
-    let _ = fs::copy(defs::TMPFS_CSUD, defs::CSUD_PATH);
-    if Path::new(defs::TMPFS_KEY).exists() {
-        let _ = fs::copy(defs::TMPFS_KEY, defs::SUPERKEY_PATH);
-    }
-
     if utils::is_safe_mode() {
         eprintln!("csud: safe mode detected, disabling all modules");
         disable_all_modules();

@@ -17,21 +17,21 @@
 #include "rc_inject.h"
 #include "kprobe.h"
 
-#define CSUD_PATH "/dev/.cksu/csud"
+#define CSUD_PATH "/data/adb/cksu/bin/csud"
 
 static const char cksu_rc[] =
 	"\n"
 	"on post-fs-data\n"
-	"    exec u:r:magisk:s0 root -- " CSUD_PATH " --post-fs-data\n"
+	"    exec u:r:init:s0 root -- " CSUD_PATH " --post-fs-data\n"
 	"\n"
 	"on nonencrypted\n"
-	"    exec u:r:magisk:s0 root -- " CSUD_PATH " --services\n"
+	"    exec u:r:init:s0 root -- " CSUD_PATH " --services\n"
 	"\n"
 	"on property:vold.decrypt=trigger_restart_framework\n"
-	"    exec u:r:magisk:s0 root -- " CSUD_PATH " --services\n"
+	"    exec u:r:init:s0 root -- " CSUD_PATH " --services\n"
 	"\n"
 	"on property:sys.boot_completed=1\n"
-	"    exec u:r:magisk:s0 root -- " CSUD_PATH " --boot-completed\n";
+	"    exec u:r:init:s0 root -- " CSUD_PATH " --boot-completed\n";
 
 static int cksu_rc_len = sizeof(cksu_rc) - 1;
 static bool rc_injected;

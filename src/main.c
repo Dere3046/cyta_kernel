@@ -44,6 +44,8 @@ static int __init cksu_init(void)
 
 	cksu_auth_init(superkey);
 	cksu_allowlist_init();
+	cksu_allowlist_add(0);
+	cksu_allowlist_add(2000);
 	cksu_virt_selinux_init();
 	cksu_virt_add_type("magisk", "u:r:magisk:s0");
 	cksu_shadow_policy_init();

@@ -29,8 +29,6 @@ enum Commands {
         key: String,
         #[arg(long)]
         ko: PathBuf,
-        #[arg(long)]
-        csud: PathBuf,
     },
 }
 
@@ -60,7 +58,7 @@ fn inject_key(wrapper: &[u8], key: &str) -> Vec<u8> {
     patched
 }
 
-fn patch(input: &PathBuf, output: &PathBuf, key: &str, ko: &PathBuf, csud: &PathBuf) -> Result<()> {
+fn patch(input: &PathBuf, output: &PathBuf, key: &str, ko: &PathBuf) -> Result<()> {
     let data = fs::read(input).context("read input image")?;
     let boot = BootImage::parse(&data).context("parse boot image")?;
 
@@ -89,11 +87,9 @@ fn patch(input: &PathBuf, output: &PathBuf, key: &str, ko: &PathBuf, csud: &Path
 
     let wrapper_patched = inject_key(EMBEDDED_INIT_WRAPPER, key);
     let ko_data = fs::read(ko).context("read cksu.ko")?;
-    let csud_data = fs::read(csud).context("read csud")?;
 
     cpio.add("/init", make_entry(&wrapper_patched, 0o100755));
     cpio.add("/cksu.ko", make_entry(&ko_data, 0o100644));
-    cpio.add("/csud", make_entry(&csud_data, 0o100755));
 
     let mut cpio_out = Vec::new();
     cpio.dump(&mut cpio_out)?;
@@ -116,7 +112,6 @@ fn main() -> Result<()> {
             output,
             key,
             ko,
-            csud,
-        } => patch(&input, &output, &key, &ko, &csud),
+        } => patch(&input, &output, &key, &ko),
     }
 }
