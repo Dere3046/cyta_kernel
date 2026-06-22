@@ -3,6 +3,7 @@
 #define CKSU_VIRT_SELINUX_H
 
 #include <linux/types.h>
+#include <linux/gfp_types.h>
 
 #define CKSU_SEPOLICY_ALLOW       1
 #define CKSU_SEPOLICY_PERMISSIVE  2
@@ -35,6 +36,7 @@ int cksu_virt_remove_type(const char *type_name);
 bool cksu_virt_type_exists(u32 type_hash);
 u32 cksu_virt_type_to_sid(u32 type_hash);
 const char *cksu_virt_sid_to_context(u32 sid);
+char *cksu_virt_sid_to_context_dup(u32 sid, gfp_t gfp);
 bool cksu_is_virtual_sid(u32 sid);
 void cksu_virt_set_proc_sid(pid_t pid, u32 sid);
 u32 cksu_virt_get_proc_sid(pid_t pid);

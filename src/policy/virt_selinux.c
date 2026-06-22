@@ -365,6 +365,23 @@ const char *cksu_virt_sid_to_context(u32 sid)
 	return NULL;
 }
 
+char *cksu_virt_sid_to_context_dup(u32 sid, gfp_t gfp)
+{
+	struct virt_type_entry *e;
+	char *dup = NULL;
+	int bkt;
+
+	rcu_read_lock();
+	hash_for_each_rcu(virt_type_table, bkt, e, node) {
+		if (e->sid == sid) {
+			dup = kstrdup(e->context, gfp);
+			break;
+		}
+	}
+	rcu_read_unlock();
+	return dup;
+}
+
 bool cksu_is_virtual_sid(u32 sid)
 {
 	return sid >= VIRTUAL_SID_BASE;

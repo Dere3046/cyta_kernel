@@ -77,7 +77,7 @@ static int handler_sid_to_ctx(struct kprobe *p, struct pt_regs *regs)
 	char **scontext_out = (char **)regs->regs[1];
 	u32 *len_out = (u32 *)regs->regs[2];
 	u32 proc_sid;
-	const char *ctx;
+	char *dup;
 
 	if (!cksu_is_virtual_sid(sid))
 		return 0;
@@ -90,13 +90,12 @@ static int handler_sid_to_ctx(struct kprobe *p, struct pt_regs *regs)
 		return 0;
 	}
 
-	ctx = cksu_virt_sid_to_context(sid);
-	if (!ctx)
+	dup = cksu_virt_sid_to_context_dup(sid, GFP_ATOMIC);
+	if (!dup)
 		return 0;
 
-	*scontext_out = kstrdup(ctx, GFP_KERNEL);
-	if (*scontext_out)
-		*len_out = strlen(ctx);
+	*scontext_out = dup;
+	*len_out = strlen(dup);
 
 	regs->regs[0] = 0;
 	regs->pc = regs->regs[30];
