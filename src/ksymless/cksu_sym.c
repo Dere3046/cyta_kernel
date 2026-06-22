@@ -88,46 +88,29 @@ int cksu_get_su_path_user(char __user *buf, int len)
 	return slen;
 }
 
+static unsigned long (*kernel_kln)(const char *name);
+
 int cksu_sym_init(void)
 {
 	struct sym_entry *e;
-	char name[128];
-	unsigned int i;
-	int total = 0, resolved = 0, fail = 0;
+	int fail = 0;
 
-	for (e = sym_table; e->name; e++)
-		total++;
-
-	for (i = 0; i < klnum_val && resolved < total; i++) {
-		unsigned long addr = sym_addr(i);
-		if (!addr)
-			continue;
-
-		expand_sym(get_sym_offset(get_sym_seq(i)), name, sizeof(name));
-
-		for (e = sym_table; e->name; e++) {
-			if (*e->storage)
-				continue;
-			if (strcmp(name, e->name) == 0 ||
-			    (e->fallback && strcmp(name, e->fallback) == 0)) {
-				*e->storage = (void *)addr;
-				resolved++;
-				break;
-			}
-		}
+	kernel_kln = (void *)kallsyms_name_to_addr("kallsyms_lookup_name");
+	if (!kernel_kln) {
+		pr_err("[cksu] kallsyms_lookup_name not found\n");
+		return -ENOENT;
 	}
 
 	for (e = sym_table; e->name; e++) {
-		if (!*e->storage) {
-			if (e->required) {
-				pr_err("[cksu] sym MISSING: %s\n", e->name);
-				fail++;
-			} else {
-				pr_warn("[cksu] sym optional: %s\n", e->name);
-			}
+		*e->storage = (void *)kernel_kln(e->name);
+		if (!*e->storage && e->fallback)
+			*e->storage = (void *)kernel_kln(e->fallback);
+		if (!*e->storage && e->required) {
+			pr_err("[cksu] sym MISSING: %s\n", e->name);
+			fail++;
 		}
 	}
 
-	pr_info("[cksu] sym: resolved %d/%d\n", resolved, total);
+	pr_info("[cksu] sym init done\n");
 	return fail ? -ENOENT : 0;
 }
