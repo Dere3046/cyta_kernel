@@ -31,6 +31,7 @@ void cksu_virt_clear_all(void);
 int cksu_virt_load_rules(const struct cksu_sepolicy_cmd __user *cmds, int count);
 
 int cksu_virt_add_type(const char *type_name, const char *context);
+int cksu_virt_remove_type(const char *type_name);
 bool cksu_virt_type_exists(u32 type_hash);
 u32 cksu_virt_type_to_sid(u32 type_hash);
 const char *cksu_virt_sid_to_context(u32 sid);

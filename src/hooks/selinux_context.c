@@ -17,6 +17,7 @@
 
 static struct cksu_hook hook_ctx_to_sid;
 static struct cksu_hook hook_sid_to_ctx;
+static struct cksu_hook hook_bounded_transition;
 
 static u32 extract_type_hash_from_context(const char *ctx, u32 len)
 {
@@ -102,6 +103,19 @@ static int handler_sid_to_ctx(struct kprobe *p, struct pt_regs *regs)
 	return 1;
 }
 
+static int handler_bounded_transition(struct kprobe *p, struct pt_regs *regs)
+{
+	u32 old_sid = (u32)regs->regs[0];
+	u32 new_sid = (u32)regs->regs[1];
+
+	if (cksu_is_virtual_sid(new_sid) || cksu_is_virtual_sid(old_sid)) {
+		regs->regs[0] = 0;
+		regs->pc = regs->regs[30];
+		return 1;
+	}
+	return 0;
+}
+
 int cksu_selinux_context_init(void)
 {
 	int ret;
@@ -117,11 +131,21 @@ int cksu_selinux_context_init(void)
 		cksu_hook_remove(&hook_ctx_to_sid);
 		return ret;
 	}
+
+	ret = cksu_hook_install(&hook_bounded_transition,
+				"security_bounded_transition",
+				handler_bounded_transition);
+	if (ret) {
+		cksu_hook_remove(&hook_sid_to_ctx);
+		cksu_hook_remove(&hook_ctx_to_sid);
+		return ret;
+	}
 	return 0;
 }
 
 void cksu_selinux_context_exit(void)
 {
+	cksu_hook_remove(&hook_bounded_transition);
 	cksu_hook_remove(&hook_sid_to_ctx);
 	cksu_hook_remove(&hook_ctx_to_sid);
 }

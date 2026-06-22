@@ -32,10 +32,13 @@ fn resolve_key(args: &[String]) -> (Option<String>, Vec<String>) {
     }
 
     if key.is_none() {
-        if let Ok(content) = std::fs::read_to_string(defs::SUPERKEY_PATH) {
-            let k = content.trim().to_string();
-            if !k.is_empty() {
-                key = Some(k);
+        for path in [defs::TMPFS_KEY, defs::SUPERKEY_PATH] {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                let k = content.trim().to_string();
+                if !k.is_empty() {
+                    key = Some(k);
+                    break;
+                }
             }
         }
     }
@@ -131,9 +134,9 @@ fn main() {
             }
             Err(e) => Err(e),
         },
-        "post-fs-data" => boot::on_post_fs_data(&key),
-        "services" => boot::on_services(&key),
-        "boot-completed" => boot::on_boot_completed(&key),
+        "post-fs-data" | "--post-fs-data" => boot::on_post_fs_data(&key),
+        "services" | "--services" => boot::on_services(&key),
+        "boot-completed" | "--boot-completed" => boot::on_boot_completed(&key),
         "module" => {
             let sub = cmd_args.get(1).map(|s| s.as_str()).unwrap_or("");
             match sub {

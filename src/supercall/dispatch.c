@@ -125,6 +125,20 @@ long cksu_dispatch(const char *arg0, int arg0_len, long cmd, long a1, long a2)
 		kdata.context[127] = '\0';
 		return cksu_virt_add_type(kdata.type_name, kdata.context);
 	}
+
+	case CKSU_REMOVE_VIRT_TYPE: {
+		char type_name[64];
+
+		if (arg0_len != CKSU_HASH_LEN)
+			return -EINVAL;
+		if (!cksu_auth_verify((const u8 *)arg0))
+			return -EPERM;
+
+		if (strncpy_from_user(type_name, (const char __user *)a1, 64) <= 0)
+			return -EFAULT;
+		type_name[63] = '\0';
+		return cksu_virt_remove_type(type_name);
+	}
 	}
 
 	return -ENOTTY;

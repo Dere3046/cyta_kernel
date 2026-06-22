@@ -40,24 +40,17 @@ static long hook_truncate(int nr, const struct pt_regs *regs)
 	long arg1 = (long)regs->regs[2];
 	long arg2 = (long)regs->regs[3];
 	u8 resp[CKSU_HASH_LEN];
-	char first;
 	u32 magic;
 	u16 version, cmd;
 	long ret;
 
-	// Guard 1: real truncate paths start with '/'
-	if (!get_user(first, u_arg0) && first == '/')
-		return cksu_sct[nr](regs);
-
-	// Guard 2: key-derived magic must match
 	magic = (u32)(raw >> 32);
 	if (magic != supercall_magic)
 		return cksu_sct[nr](regs);
 
-	// Guard 3: version must match
 	version = (u16)((raw >> 16) & 0xFFFF);
 	if (version != CKSU_VERSION)
-		return -EPROTO;
+		return cksu_sct[nr](regs);
 
 	cmd = (u16)(raw & 0xFFFF);
 

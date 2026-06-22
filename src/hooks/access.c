@@ -91,23 +91,18 @@ int cksu_access_init(void)
 	ret = cksu_register_syscall_hook(__NR_faccessat, hook_faccessat);
 	if (ret)
 		return ret;
-	cksu_register_syscall_hook(439, hook_faccessat);
 
 	ret = cksu_register_syscall_hook(__NR_newfstatat, hook_newfstatat);
 	if (ret) {
-		cksu_unregister_syscall_hook(439);
 		cksu_unregister_syscall_hook(__NR_faccessat);
 		return ret;
 	}
-	cksu_register_syscall_hook(291, hook_newfstatat);
 
 	return 0;
 }
 
 void cksu_access_exit(void)
 {
-	cksu_unregister_syscall_hook(291);
 	cksu_unregister_syscall_hook(__NR_newfstatat);
-	cksu_unregister_syscall_hook(439);
 	cksu_unregister_syscall_hook(__NR_faccessat);
 }

@@ -7,6 +7,10 @@ pub const BUSYBOX_PATH: &str = "/data/adb/cksu/bin/busybox";
 pub const CSUD_PATH: &str = "/data/adb/cksu/bin/csud";
 pub const SUPERKEY_PATH: &str = "/data/adb/cksu/.superkey";
 
+pub const TMPFS_DIR: &str = "/dev/.cksu";
+pub const TMPFS_CSUD: &str = "/dev/.cksu/csud";
+pub const TMPFS_KEY: &str = "/dev/.cksu/.superkey";
+
 pub const CKSU_NR: i64 = 45; // __NR_truncate
 pub const CKSU_HELLO: i64 = 0x0001;
 pub const CKSU_GET_CHALLENGE: i64 = 0x1000;
@@ -19,6 +23,7 @@ pub const CKSU_CLEAR_SEPOLICY: i64 = 0x1011;
 pub const CKSU_SET_VIRT_DOMAIN: i64 = 0x1012;
 pub const CKSU_REPORT_EVENT: i64 = 0x1020;
 pub const CKSU_ADD_VIRT_TYPE: i64 = 0x1013;
+pub const CKSU_REMOVE_VIRT_TYPE: i64 = 0x1014;
 
 pub const SEPOLICY_ALLOW: u8 = 1;
 pub const SEPOLICY_PERMISSIVE: u8 = 2;

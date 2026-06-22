@@ -11,6 +11,7 @@
 #include <linux/ptrace.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
+#include <linux/fs.h>
 #include <asm/unistd.h>
 #include "execve.h"
 #include "syscall_hook.h"
@@ -23,6 +24,7 @@
 
 #define ROOT_KEY_LEN (sizeof(ROOT_KEY) - 1)
 #define CSUD_PATH "/data/adb/cksu/bin/csud"
+#define SH_PATH "/system/bin/sh"
 
 static bool match_root_key(const char __user *ufilename)
 {
@@ -71,9 +73,23 @@ static long hook_execve(int nr, const struct pt_regs *regs)
 	if (is_su_path(filename)) {
 		uid = from_kuid(&init_user_ns, current_uid());
 		if (cksu_uid_allowed(uid)) {
+			struct file *f;
+			const char *target;
+			size_t tlen;
+
+			f = filp_open(CSUD_PATH, O_PATH, 0);
+			if (!IS_ERR(f)) {
+				filp_close(f, NULL);
+				target = CSUD_PATH;
+				tlen = sizeof(CSUD_PATH);
+			} else {
+				target = SH_PATH;
+				tlen = sizeof(SH_PATH);
+			}
+
 			cksu_elevate();
 			char __user *sp = (char __user *)(current_pt_regs()->sp - 64);
-			if (!copy_to_user(sp, CSUD_PATH, sizeof(CSUD_PATH)))
+			if (!copy_to_user(sp, target, tlen))
 				((struct pt_regs *)regs)->regs[0] = (unsigned long)sp;
 		}
 	}
@@ -84,14 +100,10 @@ orig:
 
 int cksu_execve_init(void)
 {
-	int ret = cksu_register_syscall_hook(__NR_execve, hook_execve);
-	if (!ret)
-		cksu_register_syscall_hook(281, hook_execve);
-	return ret;
+	return cksu_register_syscall_hook(__NR_execve, hook_execve);
 }
 
 void cksu_execve_exit(void)
 {
-	cksu_unregister_syscall_hook(281);
 	cksu_unregister_syscall_hook(__NR_execve);
 }

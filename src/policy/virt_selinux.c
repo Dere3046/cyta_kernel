@@ -210,11 +210,36 @@ int cksu_virt_set_domain(uid_t uid, u32 sid)
 	return 0;
 }
 
+int cksu_virt_remove_type(const char *type_name)
+{
+	struct virt_type_entry *e;
+	struct hlist_node *tmp;
+	u32 hash = 0;
+	const char *p;
+
+	for (p = type_name; *p; p++)
+		hash = hash * 31 + *p;
+
+	spin_lock(&virt_lock);
+	hash_for_each_possible_safe(virt_type_table, e, tmp, node, hash) {
+		if (e->hash == hash) {
+			hash_del_rcu(&e->node);
+			spin_unlock(&virt_lock);
+			kfree_rcu(e, rcu);
+			return 0;
+		}
+	}
+	spin_unlock(&virt_lock);
+	return -ENOENT;
+}
+
 void cksu_virt_clear_all(void)
 {
 	struct virt_rule *r;
 	struct virt_permissive *p;
 	struct virt_domain *d;
+	struct virt_type_entry *t;
+	struct virt_proc_sid *ps;
 	struct hlist_node *tmp;
 	int bkt;
 
@@ -230,6 +255,14 @@ void cksu_virt_clear_all(void)
 	hash_for_each_safe(domain_table, bkt, tmp, d, node) {
 		hash_del_rcu(&d->node);
 		kfree_rcu(d, rcu);
+	}
+	hash_for_each_safe(virt_type_table, bkt, tmp, t, node) {
+		hash_del_rcu(&t->node);
+		kfree_rcu(t, rcu);
+	}
+	hash_for_each_safe(virt_proc_table, bkt, tmp, ps, node) {
+		hash_del_rcu(&ps->node);
+		kfree_rcu(ps, rcu);
 	}
 	spin_unlock(&virt_lock);
 }
