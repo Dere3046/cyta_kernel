@@ -3,9 +3,6 @@
 use crate::defs;
 use crate::utils;
 use std::ffi::CString;
-use std::os::unix::process::CommandExt;
-use std::path::Path;
-use std::process::Command;
 
 fn usage() {
     eprint!(
@@ -14,6 +11,28 @@ fn usage() {
          \x20         [-] [USER]\n"
     );
     std::process::exit(1);
+}
+
+fn add_env(envp: &mut Vec<CString>, key: &str, val: &str) {
+    let s = format!("{key}={val}");
+    if let Ok(c) = CString::new(s) {
+        envp.push(c);
+    }
+}
+
+fn switch_mnt_ns(pid: i32) -> anyhow::Result<()> {
+    let ns_path = format!("/proc/{pid}/ns/mnt");
+    let c_path = CString::new(ns_path)?;
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY) };
+    if fd < 0 {
+        anyhow::bail!("open mnt ns failed");
+    }
+    let ret = unsafe { libc::syscall(libc::SYS_setns, fd, libc::CLONE_NEWNS) };
+    unsafe { libc::close(fd) };
+    if ret < 0 {
+        anyhow::bail!("setns failed");
+    }
+    Ok(())
 }
 
 pub fn main(args: &[String]) -> anyhow::Result<()> {
@@ -28,7 +47,6 @@ pub fn main(args: &[String]) -> anyhow::Result<()> {
     let mut login = false;
     let mut preserve_env = false;
     let mut mount_master = false;
-    let mut user: Option<String> = None;
     let mut i = 0;
 
     while i < args.len() {
@@ -57,78 +75,69 @@ pub fn main(args: &[String]) -> anyhow::Result<()> {
                 login = true;
                 if i + 1 < args.len() {
                     i += 1;
-                    user = Some(args[i].clone());
                 }
-            }
-            arg if !arg.starts_with('-') => {
-                user = Some(arg.to_string());
             }
             _ => {}
         }
         i += 1;
     }
 
-    let mut cmd = Command::new(&shell);
-    let shell_name = Path::new(&shell)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("sh");
-
-    let arg0 = if login {
-        format!("-{shell_name}")
-    } else {
-        shell_name.to_string()
-    };
-
-    unsafe {
-        cmd.pre_exec(move || {
-            unsafe { libc::umask(0o22) };
-            if mount_master {
-                let ns_path = CString::new("/proc/1/ns/mnt").unwrap();
-                let fd = libc::open(ns_path.as_ptr(), libc::O_RDONLY);
-                if fd >= 0 {
-                    libc::syscall(libc::SYS_setns, fd, libc::CLONE_NEWNS);
-                    libc::close(fd);
-                }
-            }
-            Ok(())
-        });
+    if mount_master {
+        let _ = switch_mnt_ns(1);
     }
-    cmd.arg0(&arg0);
 
-    if let Some(ref c) = command {
-        cmd.args(["-c", c]);
-    }
+    let arg0 = if login { "-sh" } else { "sh" };
+
+    let mut envp: Vec<CString> = Vec::new();
 
     if !preserve_env {
-        cmd.env_remove("IFS");
         let uid = unsafe { libc::getuid() };
         let pw = unsafe { libc::getpwuid(uid).as_ref() };
         if let Some(pw) = pw {
-            let pw_name = unsafe { std::ffi::CStr::from_ptr(pw.pw_name) };
             let home = unsafe { std::ffi::CStr::from_ptr(pw.pw_dir) };
-            cmd.env("HOME", home.to_string_lossy().as_ref());
-            cmd.env("USER", pw_name.to_string_lossy().as_ref());
-            cmd.env("LOGNAME", pw_name.to_string_lossy().as_ref());
+            let name = unsafe { std::ffi::CStr::from_ptr(pw.pw_name) };
+            add_env(&mut envp, "HOME", home.to_string_lossy().as_ref());
+            add_env(&mut envp, "USER", name.to_string_lossy().as_ref());
+            add_env(&mut envp, "LOGNAME", name.to_string_lossy().as_ref());
         }
-        cmd.env("SHELL", &shell);
+        add_env(&mut envp, "SHELL", &shell);
     }
 
-    if let Ok(old_path) = std::env::var("PATH") {
-        cmd.env("PATH", format!("{}:/data/adb/cksu/bin", old_path));
+    if let Ok(old) = std::env::var("PATH") {
+        add_env(&mut envp, "PATH", &format!("{old}:/data/adb/cksu/bin"));
     } else {
-        cmd.env("PATH", "/sbin:/system/bin:/system/xbin:/data/adb/cksu/bin");
+        add_env(&mut envp, "PATH", "/sbin:/system/bin:/system/xbin:/data/adb/cksu/bin");
     }
 
-    if let Some(ref u) = user {
-        cmd.env("USER", u);
+    if std::path::Path::new(defs::RC_PATH).exists() && std::env::var("ENV").is_err() {
+        add_env(&mut envp, "ENV", defs::RC_PATH);
     }
 
-    if Path::new(defs::RC_PATH).exists() && std::env::var("ENV").is_err() {
-        cmd.env("ENV", defs::RC_PATH);
+    let prog = CString::new(shell)?;
+    let a0 = CString::new(arg0)?;
+
+    let mut argv: Vec<*const libc::c_char> = vec![a0.as_ptr()];
+    if let Some(ref c) = command {
+        argv.push(
+            CString::new(b"-c".as_ref())
+                .unwrap_or_else(|_| CString::new("").unwrap())
+                .as_ptr(),
+        );
+        argv.push(
+            CString::new(c.as_bytes())
+                .unwrap_or_else(|_| CString::new("").unwrap())
+                .as_ptr(),
+        );
+    }
+    argv.push(std::ptr::null());
+
+    let mut envp_ptrs: Vec<*const libc::c_char> = envp.iter().map(|e| e.as_ptr()).collect();
+    envp_ptrs.push(std::ptr::null());
+
+    unsafe {
+        libc::umask(0o22);
+        libc::execvpe(prog.as_ptr(), argv.as_ptr(), envp_ptrs.as_ptr());
     }
 
-    let mut child = cmd.spawn()?;
-    let status = child.wait()?;
-    std::process::exit(status.code().unwrap_or(1));
+    anyhow::bail!("execvpe failed");
 }
