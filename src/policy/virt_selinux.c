@@ -55,14 +55,15 @@ struct virt_type_entry {
 static DEFINE_HASHTABLE(virt_type_table, 6);
 static atomic_t next_virt_sid = ATOMIC_INIT(VIRTUAL_SID_BASE);
 
-struct virt_proc_sid {
-	pid_t pid;
+struct virt_cred_sid {
+	unsigned long cred_ptr;
+	u32 real_sid;
 	u32 virt_sid;
 	struct hlist_node node;
 	struct rcu_head rcu;
 };
 
-static DEFINE_HASHTABLE(virt_proc_table, 8);
+static DEFINE_HASHTABLE(virt_cred_table, 8);
 
 int cksu_virt_selinux_init(void)
 {
@@ -70,29 +71,13 @@ int cksu_virt_selinux_init(void)
 	hash_init(permissive_table);
 	hash_init(domain_table);
 	hash_init(virt_type_table);
-	hash_init(virt_proc_table);
+	hash_init(virt_cred_table);
 	return 0;
 }
 
 void cksu_virt_selinux_exit(void)
 {
-	struct virt_type_entry *t;
-	struct virt_proc_sid *ps;
-	struct hlist_node *tmp;
-	int bkt;
-
 	cksu_virt_clear_all();
-
-	spin_lock(&virt_lock);
-	hash_for_each_safe(virt_type_table, bkt, tmp, t, node) {
-		hash_del_rcu(&t->node);
-		kfree_rcu(t, rcu);
-	}
-	hash_for_each_safe(virt_proc_table, bkt, tmp, ps, node) {
-		hash_del_rcu(&ps->node);
-		kfree_rcu(ps, rcu);
-	}
-	spin_unlock(&virt_lock);
 }
 
 bool cksu_virt_check(u32 ssid, u32 tsid, u16 tclass, u32 requested)
@@ -239,7 +224,7 @@ void cksu_virt_clear_all(void)
 	struct virt_permissive *p;
 	struct virt_domain *d;
 	struct virt_type_entry *t;
-	struct virt_proc_sid *ps;
+	struct virt_cred_sid *cs;
 	struct hlist_node *tmp;
 	int bkt;
 
@@ -260,9 +245,9 @@ void cksu_virt_clear_all(void)
 		hash_del_rcu(&t->node);
 		kfree_rcu(t, rcu);
 	}
-	hash_for_each_safe(virt_proc_table, bkt, tmp, ps, node) {
-		hash_del_rcu(&ps->node);
-		kfree_rcu(ps, rcu);
+	hash_for_each_safe(virt_cred_table, bkt, tmp, cs, node) {
+		hash_del_rcu(&cs->node);
+		kfree_rcu(cs, rcu);
 	}
 	spin_unlock(&virt_lock);
 }
@@ -387,44 +372,82 @@ bool cksu_is_virtual_sid(u32 sid)
 	return sid >= VIRTUAL_SID_BASE;
 }
 
-void cksu_virt_set_proc_sid(pid_t pid, u32 sid)
+void cksu_virt_set_cred_sid(const struct cred *cred, u32 real_sid, u32 virt_sid)
 {
-	struct virt_proc_sid *ps;
+	struct virt_cred_sid *cs;
+	unsigned long key = (unsigned long)cred;
 
 	spin_lock(&virt_lock);
-	hash_for_each_possible(virt_proc_table, ps, node, pid) {
-		if (ps->pid == pid) {
-			ps->virt_sid = sid;
+	hash_for_each_possible(virt_cred_table, cs, node, key) {
+		if (cs->cred_ptr == key) {
+			cs->real_sid = real_sid;
+			cs->virt_sid = virt_sid;
 			spin_unlock(&virt_lock);
 			return;
 		}
 	}
 	spin_unlock(&virt_lock);
 
-	ps = kmalloc(sizeof(*ps), GFP_KERNEL);
-	if (!ps)
+	cs = kmalloc(sizeof(*cs), GFP_KERNEL);
+	if (!cs)
 		return;
 
-	ps->pid = pid;
-	ps->virt_sid = sid;
+	cs->cred_ptr = key;
+	cs->real_sid = real_sid;
+	cs->virt_sid = virt_sid;
 
 	spin_lock(&virt_lock);
-	hash_add_rcu(virt_proc_table, &ps->node, pid);
+	hash_add_rcu(virt_cred_table, &cs->node, key);
 	spin_unlock(&virt_lock);
 }
 
-u32 cksu_virt_get_proc_sid(pid_t pid)
+u32 cksu_virt_get_cred_sid(const struct cred *cred)
 {
-	struct virt_proc_sid *ps;
+	struct virt_cred_sid *cs;
+	unsigned long key = (unsigned long)cred;
 
 	rcu_read_lock();
-	hash_for_each_possible_rcu(virt_proc_table, ps, node, pid) {
-		if (ps->pid == pid) {
-			u32 sid = ps->virt_sid;
+	hash_for_each_possible_rcu(virt_cred_table, cs, node, key) {
+		if (cs->cred_ptr == key) {
+			u32 sid = cs->virt_sid;
 			rcu_read_unlock();
 			return sid;
 		}
 	}
 	rcu_read_unlock();
 	return 0;
+}
+
+u32 cksu_virt_get_cred_real_sid(const struct cred *cred)
+{
+	struct virt_cred_sid *cs;
+	unsigned long key = (unsigned long)cred;
+
+	rcu_read_lock();
+	hash_for_each_possible_rcu(virt_cred_table, cs, node, key) {
+		if (cs->cred_ptr == key) {
+			u32 sid = cs->real_sid;
+			rcu_read_unlock();
+			return sid;
+		}
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+void cksu_virt_remove_cred_sid(const struct cred *cred)
+{
+	struct virt_cred_sid *cs;
+	struct hlist_node *tmp;
+	unsigned long key = (unsigned long)cred;
+
+	spin_lock(&virt_lock);
+	hash_for_each_possible_safe(virt_cred_table, cs, tmp, node, key) {
+		if (cs->cred_ptr == key) {
+			hash_del_rcu(&cs->node);
+			kfree_rcu(cs, rcu);
+			break;
+		}
+	}
+	spin_unlock(&virt_lock);
 }

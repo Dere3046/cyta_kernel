@@ -26,6 +26,11 @@ extern struct tracepoint *ksym_tp_sys_enter;
 
 // SELinux
 extern int (*ksym_sid_to_context)(u32, char **, u32 *);
+extern void (*ksym_cred_getsecid)(const struct cred *, u32 *);
+
+// Cred groups
+extern struct group_info *(*ksym_groups_alloc)(int);
+extern void (*ksym_groups_free)(struct group_info *);
 
 // Su path
 #define CKSU_SU_PATH_MAX 64

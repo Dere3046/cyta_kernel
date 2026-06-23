@@ -21,6 +21,9 @@ static int handler_audit_log_start(struct kprobe *p, struct pt_regs *regs)
 	if (cksu_is_blessed())
 		goto suppress;
 
+	if (cksu_virt_get_cred_sid(current_cred()))
+		goto suppress;
+
 	uid_t uid = from_kuid(&init_user_ns, current_uid());
 	if (cksu_virt_uid_has_domain(uid))
 		goto suppress;

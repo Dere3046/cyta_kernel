@@ -1,10 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
- * selinux_context.c — fake SELinux context via virtual SID
- *
- * Copyright (C) 2026 dere3046
- */
-
 #include <linux/kprobes.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
@@ -18,6 +12,8 @@
 static struct cksu_hook hook_ctx_to_sid;
 static struct cksu_hook hook_sid_to_ctx;
 static struct cksu_hook hook_bounded_transition;
+static struct cksu_hook hook_prepare_creds;
+static struct cksu_hook hook_cred_free;
 
 static u32 extract_type_hash_from_context(const char *ctx, u32 len)
 {
@@ -50,11 +46,12 @@ static int handler_ctx_to_sid(struct kprobe *p, struct pt_regs *regs)
 	const char *scontext = (const char *)regs->regs[0];
 	u32 scontext_len = (u32)regs->regs[1];
 	u32 *sid_out = (u32 *)regs->regs[2];
-	uid_t uid = from_kuid(&init_user_ns, current_uid());
 	char buf[128];
 	u32 copy_len, type_hash;
 
-	if (!cksu_is_blessed() && !cksu_virt_uid_has_domain(uid))
+	if (!cksu_is_blessed() &&
+	    !cksu_virt_get_cred_sid(current_cred()) &&
+	    !cksu_virt_uid_has_domain(from_kuid(&init_user_ns, current_uid())))
 		return 0;
 
 	copy_len = scontext_len < 127 ? scontext_len : 127;
@@ -76,19 +73,26 @@ static int handler_sid_to_ctx(struct kprobe *p, struct pt_regs *regs)
 	u32 sid = (u32)regs->regs[0];
 	char **scontext_out = (char **)regs->regs[1];
 	u32 *len_out = (u32 *)regs->regs[2];
-	u32 proc_sid;
+	u32 real_sid, cred_sid;
 	char *dup;
+
+	real_sid = cksu_virt_get_cred_real_sid(current_cred());
+	if (real_sid && real_sid == sid) {
+		cred_sid = cksu_virt_get_cred_sid(current_cred());
+		if (cred_sid) {
+			dup = cksu_virt_sid_to_context_dup(cred_sid, GFP_ATOMIC);
+			if (dup) {
+				*scontext_out = dup;
+				*len_out = strlen(dup);
+				regs->regs[0] = 0;
+				regs->pc = regs->regs[30];
+				return 1;
+			}
+		}
+	}
 
 	if (!cksu_is_virtual_sid(sid))
 		return 0;
-
-	proc_sid = cksu_virt_get_proc_sid(current->pid);
-	if (proc_sid && proc_sid == sid) {
-		/* this process owns this virtual SID */
-	} else if (!cksu_is_blessed() &&
-		   !cksu_virt_uid_has_domain(from_kuid(&init_user_ns, current_uid()))) {
-		return 0;
-	}
 
 	dup = cksu_virt_sid_to_context_dup(sid, GFP_ATOMIC);
 	if (!dup)
@@ -96,7 +100,6 @@ static int handler_sid_to_ctx(struct kprobe *p, struct pt_regs *regs)
 
 	*scontext_out = dup;
 	*len_out = strlen(dup);
-
 	regs->regs[0] = 0;
 	regs->pc = regs->regs[30];
 	return 1;
@@ -115,6 +118,28 @@ static int handler_bounded_transition(struct kprobe *p, struct pt_regs *regs)
 	return 0;
 }
 
+static int handler_prepare_creds(struct kprobe *p, struct pt_regs *regs)
+{
+	struct cred *new_cred = (struct cred *)regs->regs[0];
+	const struct cred *old_cred = (const struct cred *)regs->regs[1];
+	u32 virt_sid, real_sid;
+
+	virt_sid = cksu_virt_get_cred_sid(old_cred);
+	if (virt_sid) {
+		real_sid = cksu_virt_get_cred_real_sid(old_cred);
+		cksu_virt_set_cred_sid(new_cred, real_sid, virt_sid);
+	}
+	return 0;
+}
+
+static int handler_cred_free(struct kprobe *p, struct pt_regs *regs)
+{
+	struct cred *cred = (struct cred *)regs->regs[0];
+
+	cksu_virt_remove_cred_sid(cred);
+	return 0;
+}
+
 int cksu_selinux_context_init(void)
 {
 	int ret;
@@ -126,24 +151,44 @@ int cksu_selinux_context_init(void)
 
 	ret = cksu_hook_install(&hook_sid_to_ctx, "security_sid_to_context",
 				handler_sid_to_ctx);
-	if (ret) {
-		cksu_hook_remove(&hook_ctx_to_sid);
-		return ret;
-	}
+	if (ret)
+		goto err_ctx_to_sid;
 
 	ret = cksu_hook_install(&hook_bounded_transition,
 				"security_bounded_transition",
 				handler_bounded_transition);
-	if (ret) {
-		cksu_hook_remove(&hook_sid_to_ctx);
-		cksu_hook_remove(&hook_ctx_to_sid);
-		return ret;
-	}
+	if (ret)
+		goto err_sid_to_ctx;
+
+	ret = cksu_hook_install(&hook_prepare_creds,
+				"security_prepare_creds",
+				handler_prepare_creds);
+	if (ret)
+		goto err_bounded;
+
+	ret = cksu_hook_install(&hook_cred_free,
+				"security_cred_free",
+				handler_cred_free);
+	if (ret)
+		goto err_prepare;
+
 	return 0;
+
+err_prepare:
+	cksu_hook_remove(&hook_prepare_creds);
+err_bounded:
+	cksu_hook_remove(&hook_bounded_transition);
+err_sid_to_ctx:
+	cksu_hook_remove(&hook_sid_to_ctx);
+err_ctx_to_sid:
+	cksu_hook_remove(&hook_ctx_to_sid);
+	return ret;
 }
 
 void cksu_selinux_context_exit(void)
 {
+	cksu_hook_remove(&hook_cred_free);
+	cksu_hook_remove(&hook_prepare_creds);
 	cksu_hook_remove(&hook_bounded_transition);
 	cksu_hook_remove(&hook_sid_to_ctx);
 	cksu_hook_remove(&hook_ctx_to_sid);

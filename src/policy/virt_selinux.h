@@ -38,7 +38,11 @@ u32 cksu_virt_type_to_sid(u32 type_hash);
 const char *cksu_virt_sid_to_context(u32 sid);
 char *cksu_virt_sid_to_context_dup(u32 sid, gfp_t gfp);
 bool cksu_is_virtual_sid(u32 sid);
-void cksu_virt_set_proc_sid(pid_t pid, u32 sid);
-u32 cksu_virt_get_proc_sid(pid_t pid);
+
+struct cred;
+void cksu_virt_set_cred_sid(const struct cred *cred, u32 real_sid, u32 virt_sid);
+u32 cksu_virt_get_cred_sid(const struct cred *cred);
+u32 cksu_virt_get_cred_real_sid(const struct cred *cred);
+void cksu_virt_remove_cred_sid(const struct cred *cred);
 
 #endif

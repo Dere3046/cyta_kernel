@@ -16,6 +16,9 @@ void **ksym_sys_call_table;
 unsigned long ksym_ni_syscall;
 struct tracepoint *ksym_tp_sys_enter;
 int (*ksym_sid_to_context)(u32, char **, u32 *);
+void (*ksym_cred_getsecid)(const struct cred *, u32 *);
+struct group_info *(*ksym_groups_alloc)(int);
+void (*ksym_groups_free)(struct group_info *);
 
 struct sym_entry {
 	const char *name;
@@ -35,6 +38,9 @@ static struct sym_entry sym_table[] = {
 	{ "filp_open",               NULL,                    (void **)&ksym_filp_open,      false },
 	{ "filp_close",              NULL,                    (void **)&ksym_filp_close,     false },
 	{ "security_sid_to_context", NULL,                    (void **)&ksym_sid_to_context, false },
+	{ "security_cred_getsecid", NULL,                    (void **)&ksym_cred_getsecid,  false },
+	{ "groups_alloc",           NULL,                    (void **)&ksym_groups_alloc,   false },
+	{ "groups_free",            NULL,                    (void **)&ksym_groups_free,    false },
 	{ NULL, NULL, NULL, false }
 };
 

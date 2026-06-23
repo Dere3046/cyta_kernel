@@ -25,6 +25,9 @@ static int handler_avc_denied(struct kprobe *p, struct pt_regs *regs)
 	if (cksu_is_blessed())
 		goto allow;
 
+	if (cksu_virt_get_cred_sid(current_cred()))
+		goto allow;
+
 	uid = from_kuid(&init_user_ns, current_uid());
 
 	if (cksu_virt_uid_has_domain(uid)) {
