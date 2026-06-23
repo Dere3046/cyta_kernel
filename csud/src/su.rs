@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+use crate::defs;
 use crate::utils;
 use std::ffi::CString;
 use std::os::unix::process::CommandExt;
@@ -121,6 +122,10 @@ pub fn main(args: &[String]) -> anyhow::Result<()> {
 
     if let Some(ref u) = user {
         cmd.env("USER", u);
+    }
+
+    if Path::new(defs::RC_PATH).exists() && std::env::var("ENV").is_err() {
+        cmd.env("ENV", defs::RC_PATH);
     }
 
     let err = cmd.exec();

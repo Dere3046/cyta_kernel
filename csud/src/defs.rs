@@ -6,6 +6,7 @@ pub const MODULE_UPDATE_DIR: &str = "/data/adb/cksu/modules_update";
 pub const BUSYBOX_PATH: &str = "/data/adb/cksu/bin/busybox";
 pub const CSUD_PATH: &str = "/data/adb/cksu/bin/csud";
 pub const SUPERKEY_PATH: &str = "/data/adb/cksu/.superkey";
+pub const RC_PATH: &str = "/data/adb/cksu/.cksurc";
 
 pub const TMPFS_DIR: &str = "/dev/.cksu";
 pub const TMPFS_CSUD: &str = "/dev/.cksu/csud";
