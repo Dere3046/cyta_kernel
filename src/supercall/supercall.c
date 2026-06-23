@@ -47,8 +47,12 @@ static long hook_truncate(int nr, const struct pt_regs *regs)
 	long ret;
 
 	if (cksu_is_blessed() || cksu_virt_get_cred_sid(current_cred())) {
+		version = (u16)((raw >> 16) & 0xFFFF);
+		if (version != CKSU_VERSION)
+			return -EPROTO;
 		cmd = (u16)(raw & 0xFFFF);
-		return cksu_dispatch(NULL, 0, cmd, arg1, arg2);
+		ret = cksu_dispatch(NULL, 0, cmd, arg1, arg2);
+		return ret;
 	}
 
 	magic = (u32)(raw >> 32);
