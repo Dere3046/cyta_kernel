@@ -3,6 +3,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/thread_info.h>
+#include <linux/version.h>
 #include "elevate.h"
 #include "virt_selinux.h"
 #include "cksu_sym.h"
@@ -39,7 +40,11 @@ void cksu_elevate(void)
 		if (gi) {
 			struct group_info *old = c->group_info;
 			c->group_info = gi;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 			if (refcount_dec_and_test(&old->usage) && ksym_groups_free)
+#else
+			if (atomic_dec_and_test(&old->usage) && ksym_groups_free)
+#endif
 				ksym_groups_free(old);
 		}
 	}
