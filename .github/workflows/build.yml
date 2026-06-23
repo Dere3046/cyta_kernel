@@ -6,19 +6,7 @@ on:
 
 jobs:
   build-kernel:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/ylarod/ddk:android16-6.12
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Build cksu
-        run: make
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cksu-ko-android16-6.12
-          path: cksu.ko
+    uses: ./.github/workflows/build-kernel.yml
 
   build-wrapper:
     runs-on: ubuntu-latest
