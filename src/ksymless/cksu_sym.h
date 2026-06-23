@@ -5,7 +5,8 @@
 #include <linux/types.h>
 #include <linux/mm_types.h>
 #include <linux/fs.h>
-#include <asm/pgtable-types.h>
+#include <linux/gfp.h>
+#include <asm/pgtable.h>
 
 struct tracepoint;
 

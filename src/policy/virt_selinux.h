@@ -3,7 +3,7 @@
 #define CKSU_VIRT_SELINUX_H
 
 #include <linux/types.h>
-#include <linux/gfp_types.h>
+#include <linux/gfp.h>
 
 #define CKSU_SEPOLICY_ALLOW       1
 #define CKSU_SEPOLICY_PERMISSIVE  2
