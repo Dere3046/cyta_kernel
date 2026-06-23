@@ -128,6 +128,7 @@ pub fn main(args: &[String]) -> anyhow::Result<()> {
         cmd.env("ENV", defs::RC_PATH);
     }
 
-    let err = cmd.exec();
-    anyhow::bail!("exec failed: {err}");
+    let mut child = cmd.spawn()?;
+    let status = child.wait()?;
+    std::process::exit(status.code().unwrap_or(1));
 }
