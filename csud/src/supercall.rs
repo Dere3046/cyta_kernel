@@ -58,14 +58,6 @@ pub fn auth_call(key: &str, cmd: i64, a1: i64, a2: i64) -> anyhow::Result<i64> {
     Ok(ret)
 }
 
-pub fn grant_root(key: &str) -> anyhow::Result<()> {
-    let ret = auth_call(key, CKSU_GRANT_ROOT, 0, 0)?;
-    if ret != 0 {
-        anyhow::bail!("grant_root failed: {ret}");
-    }
-    Ok(())
-}
-
 pub fn add_uid(key: &str, uid: u32) -> anyhow::Result<()> {
     let ret = auth_call(key, CKSU_ADD_UID, uid as i64, 0)?;
     if ret != 0 {

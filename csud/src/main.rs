@@ -49,12 +49,12 @@ fn resolve_key(args: &[String]) -> (Option<String>, Vec<String>) {
 fn usage() {
     eprintln!("csud -k <key> <command> [args...]");
     eprintln!();
-    eprintln!("  root              grant root + shell");
-    eprintln!("  su [args...]      su compatible mode");
     eprintln!("  hello             check module loaded");
     eprintln!("  allow <uid>       add uid to allowlist");
     eprintln!("  deny <uid>        remove uid");
     eprintln!("  list              show allowlist");
+    eprintln!("  set-su-path <p>   change su path");
+    eprintln!("  get-su-path       show su path");
     eprintln!("  post-fs-data      boot stage");
     eprintln!("  services          boot stage");
     eprintln!("  boot-completed    boot stage");
@@ -70,27 +70,16 @@ fn main() {
         .and_then(|n| n.to_str())
         .unwrap_or("csud");
 
-    if exe_name == "su" {
-        let (key, remaining) = resolve_key(&args[1..]);
-        let key = key.unwrap_or_else(|| {
-            eprintln!("su: no key (use -k, CKSU_KEY, or {})", defs::SUPERKEY_PATH);
-            std::process::exit(1);
-        });
-        if let Err(e) = su::main(&key, &remaining) {
-            eprintln!("su: {e}");
+    if exe_name != "csud" {
+        if let Err(e) = su::main(&args[1..]) {
+            eprintln!("{}: {e}", exe_name);
             std::process::exit(1);
         }
         return;
     }
 
     let (key, cmd_args) = resolve_key(&args[1..]);
-    let key = match key {
-        Some(k) => k,
-        None => {
-            usage();
-            std::process::exit(1);
-        }
-    };
+    let key = key.unwrap_or_default();
 
     if cmd_args.is_empty() {
         usage();
@@ -108,14 +97,7 @@ fn main() {
                 Err(e) => Err(e),
             }
         }
-        "root" => match supercall::grant_root(&key) {
-            Ok(()) => {
-                println!("uid={} gid={}", unsafe { libc::getuid() }, unsafe { libc::getgid() });
-                su::main(&key, &[])
-            }
-            Err(e) => Err(e),
-        },
-        "su" => su::main(&key, &cmd_args[1..]),
+        "su" => su::main(&cmd_args[1..]),
         "allow" => {
             let uid: u32 = cmd_args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             supercall::add_uid(&key, uid).map(|_| println!("added {uid}"))

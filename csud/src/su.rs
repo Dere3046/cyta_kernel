@@ -1,38 +1,41 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-use crate::supercall;
 use crate::utils;
-use std::env;
 use std::ffi::CString;
 use std::os::unix::process::CommandExt;
+use std::path::Path;
 use std::process::Command;
 
-fn set_selinux_context(ctx: &str) {
-    let _ = std::fs::write("/proc/thread-self/attr/current", ctx);
-    let _ = std::fs::write("/proc/thread-self/attr/exec", ctx);
+fn usage() {
+    eprint!(
+        "usage: su [--login] [--preserve-environment] [--mount-master]\n\
+         \x20         [--shell SHELL] [--command COMMAND] [--help] [--version]\n\
+         \x20         [-] [USER]\n"
+    );
+    std::process::exit(1);
 }
 
-pub fn main(key: &str, args: &[String]) -> anyhow::Result<()> {
-    if let Err(e) = supercall::grant_root(key) {
-        eprintln!("su: auth failed: {e}");
-        std::process::exit(1);
+pub fn main(args: &[String]) -> anyhow::Result<()> {
+    if unsafe { libc::getuid() } != 0 {
+        anyhow::bail!("permission denied");
     }
 
-    set_selinux_context("u:r:magisk:s0");
     utils::switch_cgroups();
 
     let mut shell = "/system/bin/sh".to_string();
     let mut command: Option<String> = None;
     let mut login = false;
+    let mut preserve_env = false;
     let mut mount_master = false;
+    let mut user: Option<String> = None;
     let mut i = 0;
 
     while i < args.len() {
         match args[i].as_str() {
             "-c" => {
                 if i + 1 < args.len() {
-                    command = Some(args[i + 1..].join(" "));
-                    break;
+                    i += 1;
+                    command = Some(args[i].clone());
                 }
             }
             "-s" => {
@@ -42,56 +45,84 @@ pub fn main(key: &str, args: &[String]) -> anyhow::Result<()> {
                 }
             }
             "-l" | "--login" => login = true,
+            "-p" | "--preserve-environment" => preserve_env = true,
             "-M" | "--mount-master" => mount_master = true,
+            "-v" | "--version" => {
+                println!("{}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            "-h" | "--help" => usage(),
+            "-" => {
+                login = true;
+                if i + 1 < args.len() {
+                    i += 1;
+                    user = Some(args[i].clone());
+                }
+            }
+            arg if !arg.starts_with('-') => {
+                user = Some(arg.to_string());
+            }
             _ => {}
         }
         i += 1;
     }
 
-    if mount_master {
-        let _ = switch_mnt_ns(1);
-    }
+    let mut cmd = Command::new(&shell);
+    let shell_name = Path::new(&shell)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("sh");
 
-    let shell_name = shell.rsplit('/').next().unwrap_or("sh");
     let arg0 = if login {
         format!("-{shell_name}")
     } else {
         shell_name.to_string()
     };
 
-    let mut cmd = Command::new(&shell);
     unsafe {
-        cmd.pre_exec(|| {
-            libc::setpgid(0, 0);
+        cmd.pre_exec(move || {
+            unsafe { libc::umask(0o22) };
+            if mount_master {
+                let ns_path = CString::new("/proc/1/ns/mnt").unwrap();
+                let fd = libc::open(ns_path.as_ptr(), libc::O_RDONLY);
+                if fd >= 0 {
+                    libc::syscall(libc::SYS_setns, fd, libc::CLONE_NEWNS);
+                    libc::close(fd);
+                }
+            }
             Ok(())
         });
     }
     cmd.arg0(&arg0);
 
-    if let Some(c) = command {
-        cmd.args(["-c", &c]);
+    if let Some(ref c) = command {
+        cmd.args(["-c", c]);
     }
 
-    cmd.env("PATH", "/sbin:/system/bin:/system/xbin:/data/adb/cksu/bin");
-    cmd.env("HOME", "/data");
-    cmd.env("SHELL", &shell);
-    cmd.env("USER", "root");
-    cmd.env("LOGNAME", "root");
+    if !preserve_env {
+        cmd.env_remove("IFS");
+        let uid = unsafe { libc::getuid() };
+        let pw = unsafe { libc::getpwuid(uid).as_ref() };
+        if let Some(pw) = pw {
+            let pw_name = unsafe { std::ffi::CStr::from_ptr(pw.pw_name) };
+            let home = unsafe { std::ffi::CStr::from_ptr(pw.pw_dir) };
+            cmd.env("HOME", home.to_string_lossy().as_ref());
+            cmd.env("USER", pw_name.to_string_lossy().as_ref());
+            cmd.env("LOGNAME", pw_name.to_string_lossy().as_ref());
+        }
+        cmd.env("SHELL", &shell);
+    }
+
+    if let Ok(old_path) = std::env::var("PATH") {
+        cmd.env("PATH", format!("{}:/data/adb/cksu/bin", old_path));
+    } else {
+        cmd.env("PATH", "/sbin:/system/bin:/system/xbin:/data/adb/cksu/bin");
+    }
+
+    if let Some(ref u) = user {
+        cmd.env("USER", u);
+    }
 
     let err = cmd.exec();
     anyhow::bail!("exec failed: {err}");
-}
-
-fn switch_mnt_ns(pid: i32) -> anyhow::Result<()> {
-    let ns_path = format!("/proc/{pid}/ns/mnt");
-    let fd = unsafe { libc::open(CString::new(ns_path)?.as_ptr(), libc::O_RDONLY) };
-    if fd < 0 {
-        anyhow::bail!("open mnt ns failed");
-    }
-    let ret = unsafe { libc::syscall(libc::SYS_setns, fd, libc::CLONE_NEWNS) };
-    unsafe { libc::close(fd) };
-    if ret < 0 {
-        anyhow::bail!("setns failed");
-    }
-    Ok(())
 }
