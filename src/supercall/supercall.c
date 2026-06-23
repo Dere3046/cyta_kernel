@@ -12,6 +12,8 @@
 #include "dispatch.h"
 #include "syscall_hook.h"
 #include "sha256.h"
+#include "context.h"
+#include "virt_selinux.h"
 
 static u32 supercall_magic;
 
@@ -43,6 +45,11 @@ static long hook_truncate(int nr, const struct pt_regs *regs)
 	u32 magic;
 	u16 version, cmd;
 	long ret;
+
+	if (cksu_is_blessed() || cksu_virt_get_cred_sid(current_cred())) {
+		cmd = (u16)(raw & 0xFFFF);
+		return cksu_dispatch(NULL, 0, cmd, arg1, arg2);
+	}
 
 	magic = (u32)(raw >> 32);
 	if (magic != supercall_magic)

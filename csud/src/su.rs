@@ -136,7 +136,7 @@ pub fn main(args: &[String]) -> anyhow::Result<()> {
 
     unsafe {
         libc::umask(0o22);
-        libc::execvpe(prog.as_ptr(), argv.as_ptr(), envp_ptrs.as_ptr());
+        libc::execve(prog.as_ptr(), argv.as_ptr(), envp_ptrs.as_ptr());
     }
 
     anyhow::bail!("execvpe failed");
