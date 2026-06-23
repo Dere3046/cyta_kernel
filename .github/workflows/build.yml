@@ -24,15 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: nttld/setup-ndk@v1
-        id: ndk
-        with:
-          ndk-version: r27
+      - name: Install cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: Build init_wrapper
-        run: |
-          ${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang \
-            -static -Wl,-z,max-page-size=65536 \
-            -o init-wrapper/init_wrapper init-wrapper/wrapper.c
+        run: aarch64-linux-gnu-gcc -static -o init-wrapper/init_wrapper init-wrapper/wrapper.c
       - uses: actions/upload-artifact@v4
         with:
           name: init-wrapper

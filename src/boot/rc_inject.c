@@ -1,21 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
- * rc_inject.c — init.rc injection via read hook + f_op proxy
- *
- * Copyright (C) 2026 dere3046
- */
-
 #include <linux/module.h>
-#include <linux/kprobes.h>
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/dcache.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
-#include <linux/slab.h>
+#include <asm/unistd.h>
 #include "rc_inject.h"
-#include "kprobe.h"
+#include "syscall_hook.h"
 
 #define CSUD_PATH "/data/adb/cksu/bin/csud"
 
@@ -34,13 +27,8 @@ static const char cksu_rc[] =
 	"    exec u:r:init:s0 root -- " CSUD_PATH " --boot-completed\n";
 
 static int cksu_rc_len = sizeof(cksu_rc) - 1;
-static bool rc_injected;
-static struct kprobe hook_read_kp;
-static struct kprobe hook_fstat_kp;
-
-static struct file_operations fops_proxy;
-static ssize_t (*orig_read)(struct file *, char __user *, size_t, loff_t *);
 static int inject_offset;
+static bool rc_injected;
 
 static bool is_init_rc(struct file *fp)
 {
@@ -58,102 +46,77 @@ static bool is_init_rc(struct file *fp)
 	return strcmp(dentry->d_name.name, "init.rc") == 0;
 }
 
-static ssize_t proxy_read(struct file *fp, char __user *buf,
-			  size_t count, loff_t *pos)
+static long hook_read_rc(int nr, const struct pt_regs *regs)
 {
-	ssize_t ret;
-
-	ret = orig_read(fp, buf, count, pos);
-	if (ret != 0)
-		return ret;
-
-	if (inject_offset >= cksu_rc_len)
-		return 0;
-
-	int remaining = cksu_rc_len - inject_offset;
-	int to_copy = remaining < count ? remaining : count;
-
-	if (copy_to_user(buf, cksu_rc + inject_offset, to_copy))
-		return -EFAULT;
-
-	inject_offset += to_copy;
-	*pos += to_copy;
-	return to_copy;
-}
-
-static void install_fops_proxy(struct file *fp)
-{
-	memcpy(&fops_proxy, fp->f_op, sizeof(struct file_operations));
-	orig_read = fp->f_op->read;
-	fops_proxy.read = proxy_read;
-	inject_offset = 0;
-	fp->f_op = &fops_proxy;
-}
-
-static int handler_read(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *ur;
+	long ret;
 	int fd;
 	struct file *fp;
+	char __user *buf;
+	size_t count;
+	int remaining, to_copy;
 
-	if (rc_injected)
-		return 0;
+	ret = cksu_sct[nr](regs);
 
-	ur = (struct pt_regs *)regs->regs[0];
-	fd = (int)ur->regs[0];
+	if (rc_injected || ret != 0)
+		return ret;
 
+	if (strcmp(current->comm, "init") != 0)
+		return ret;
+
+	fd = (int)regs->regs[0];
 	fp = fget(fd);
 	if (!fp)
-		return 0;
+		return ret;
 
-	if (is_init_rc(fp)) {
-		install_fops_proxy(fp);
+	if (!is_init_rc(fp)) {
+		fput(fp);
+		return ret;
+	}
+	fput(fp);
+
+	buf = (char __user *)regs->regs[1];
+	count = (size_t)regs->regs[2];
+
+	remaining = cksu_rc_len - inject_offset;
+	if (remaining <= 0) {
 		rc_injected = true;
-		unregister_kprobe(&hook_read_kp);
-		unregister_kprobe(&hook_fstat_kp);
-		pr_info("[cksu] rc_inject: installed on init.rc\n");
+		cksu_unregister_syscall_hook(__NR_read);
+		return 0;
 	}
 
-	fput(fp);
-	return 0;
-}
+	to_copy = remaining < (int)count ? remaining : (int)count;
+	if (copy_to_user(buf, cksu_rc + inject_offset, to_copy))
+		return ret;
 
-static int handler_fstat(struct kprobe *p, struct pt_regs *regs)
-{
-	return 0;
+	inject_offset += to_copy;
+	if (inject_offset >= cksu_rc_len) {
+		rc_injected = true;
+		cksu_unregister_syscall_hook(__NR_read);
+	}
+
+	return to_copy;
 }
 
 int cksu_rc_inject_init(void)
 {
-	int ret;
-
 	if (current->pid != 1) {
 		pr_info("[cksu] rc_inject: late load, skipping\n");
 		return 0;
 	}
 
 	rc_injected = false;
+	inject_offset = 0;
 
-	hook_read_kp.symbol_name = "__arm64_sys_read";
-	hook_read_kp.pre_handler = handler_read;
-	ret = register_kprobe(&hook_read_kp);
-	if (ret) {
-		pr_warn("[cksu] rc_inject: read hook failed: %d\n", ret);
-		return ret;
-	}
-
-	hook_fstat_kp.symbol_name = "__arm64_sys_newfstatat";
-	hook_fstat_kp.pre_handler = handler_fstat;
-	register_kprobe(&hook_fstat_kp);
-
-	pr_info("[cksu] rc_inject: waiting for init.rc\n");
-	return 0;
+	int ret = cksu_register_syscall_hook(__NR_read, hook_read_rc);
+	if (ret)
+		pr_warn("[cksu] rc_inject: hook read failed: %d\n", ret);
+	else
+		pr_info("[cksu] rc_inject: waiting for init.rc\n");
+	return ret;
 }
 
 void cksu_rc_inject_exit(void)
 {
-	if (!rc_injected) {
-		unregister_kprobe(&hook_read_kp);
-		unregister_kprobe(&hook_fstat_kp);
-	}
+	if (!rc_injected)
+		cksu_unregister_syscall_hook(__NR_read);
 }
