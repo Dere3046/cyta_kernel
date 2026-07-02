@@ -40,7 +40,6 @@ static int __init cksu_init(void)
 	pr_info("[cksu] init v2\n");
 
 	find_kallsyms_base();
-	ksymless_cache_kln();
 
 	ret = cksu_sym_init();
 	if (ret) {

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 MODULE_NAME := cksu
 $(MODULE_NAME)-objs := \
-	src/ksymless/ksymless.o \
-	src/ksymless/ksymless_android/src/core.o \
+	src/ksymless/ksymless_android/lib/core.o \
 	src/ksymless/cksu_sym.o \
 	src/hooks/patch_memory.o \
 	src/hooks/syscall_hook.o \

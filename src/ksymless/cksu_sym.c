@@ -3,6 +3,7 @@
 #include <linux/printk.h>
 #include <linux/uaccess.h>
 #include <asm/barrier.h>
+#include "ksymless.h"
 #include "cksu_sym.h"
 #include "ksymless.h"
 
@@ -101,9 +102,9 @@ int cksu_sym_init(void)
 	struct sym_entry *e;
 	int fail = 0;
 
-	kernel_kln = (void *)kallsyms_name_to_addr("kallsyms_lookup_name");
+	kernel_kln = ksymless_klp;
 	if (!kernel_kln) {
-		pr_err("[cksu] kallsyms_lookup_name not found\n");
+		pr_err("[cksu] kallsyms_lookup_name not resolved\n");
 		return -ENOENT;
 	}
 
